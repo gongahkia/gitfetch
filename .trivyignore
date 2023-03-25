@@ -1,3 +1,0 @@
-# GO-2026-5932 has no upstream fix and govulncheck reports it is not reachable
-# from this application. Reassess before this exception expires.
-GO-2026-5932 exp:2026-10-11
