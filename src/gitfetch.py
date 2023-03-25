@@ -1,13 +1,14 @@
 # TODO
-    # --- * mention in the README that this is optimised for screens with font size 10
     # --- * to include in bash script, automatically download pillow via pip3
     # --- * need to account for users who have multiple newline characters in their user bio
+    # --- * need to find absolute/relative file path for gitfetch.py, can make config file a .file that is hidden, then open it and set default user config once, after that default user config with no arguments is taken from the .file 
 
 # --- required imports ✔️
 import requests
 import urllib.request
 import json
 import os
+import os.path
 from PIL import Image
 from datetime import date
 
