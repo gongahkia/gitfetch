@@ -2,7 +2,7 @@
 
 [Neofetch](https://github.com/dylanaraps/neofetch) for your Github profile.
 
-> ***Gitfetch*** is optimized for terminals with a font size 10
+> ***Gitfetch*** is optimized for terminals with font size 10.
 
 ![](assets/gitfetch.png)
 
