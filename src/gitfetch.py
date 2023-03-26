@@ -1,7 +1,6 @@
 # TODO
-    # --- * to include in bash script, automatically download pillow via pip3
+    # --- * to include in bash script, automatically download pip3, and download pillow, requests via pip3
     # --- * need to account for users who have multiple newline characters in their user bio
-    # --- * need to find absolute/relative file path for gitfetch.py, can make config file a .file that is hidden, then open it and set default user config once, after that default user config with no arguments is taken from the .file 
 
 # --- required imports ✔️
 import requests
@@ -41,7 +40,16 @@ dayCurrent:int = int(currentDate.split("-")[2])
 
 # --- actual program loop ✔️
 while True:
-    githubUsername:str = input("Enter Github Username: ")
+    if os.path.isfile(".gitfetchConfig"): # --- set default github username once, then run it automatically after ✔️
+                                          # --- * convert this to be taken in as a bash argument the first time
+        fhand = open(".gitfetchConfig", "r")
+        configFiles = json.load(fhand)
+        githubUsername:str = configFiles["username"]
+    else:
+        githubUsername:str = input("Enter Github Username: ")
+        fhand = open(".gitfetchConfig", "w")
+        fhand.write('{"username" : "'+ githubUsername + '"}')
+        fhand.close()
 
     githubInfoRetrieval = requests.get(f"https://api.github.com/users/{githubUsername}") 
 
@@ -125,3 +133,5 @@ while True:
     # --- if user wants the ASCII file to be saved to machine, uncomment the below portion ✔️
     """with open("avatarImgASCII.txt", "w") as f:
         f.write(ImgASCII)"""
+
+    break # --- break statement to ensure I don't get rate-limited by Github API immediately
