@@ -33,15 +33,21 @@ $ ./mainInstall.sh
 
 Encountered an issue that isn't covered here? Open an issue or shoot me a message on Telegram, and I'll get it sorted asap!
 
+---
+
 ### I want to uninstall Gitfetch 😔
 
 ```console
 ```
 
+---
+
 ### `ls`, `sudo` and other terminal commands suddenly don't work 😭
 
 ```console
 ```
+
+---
 
 ### I typed the wrong Github username and want to change it 🤡
 
