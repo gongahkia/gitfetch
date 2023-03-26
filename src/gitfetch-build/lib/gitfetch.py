@@ -1,4 +1,5 @@
 # TODO
+    # --- * consider checking for a given file path when writing the .gitfetchConfig and moving it to another directory to prevent conflict of sudo permissions when writing changes to a file within the usr/bin directory
     # --- * need to account for users who have multiple newline characters in their user bio
     # --- * convert github username to be taken as a bash argument the first time
 
