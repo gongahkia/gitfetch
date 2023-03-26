@@ -3,8 +3,7 @@
     # --- * to include in bash script, automatically download pip3, and download pillow, requests via pip3
     # --- * append lines to User's .bashrc to add program to their file, and add an alias so typing gitfetch is equal to calling the shell executable ./main.sh
     # --- * create a folder with the binary that will be downloaded to the ~/../../usr/bin file path
-    # --- * need to account for those users without a .config directory, and make it for them
-    # --- * style installation in same format as me downloading the items to nvim to my chromebook
+    # --- * style installation in same format as me downloading the items for nvim to my chromebook (ie. adding the PATH to my .bashrc)
 
 import os
 import platform
@@ -32,9 +31,9 @@ match platform.system():
 
 # --- copies the desired binary to the ~/../../usr/bin file path ✔️
     # --- * edit this to copy the folder containing the gitfetch binary to the desired file path
-shutil.copy("gitfetch.py", "/home/../../usr/bin")
+shutil.copytree("gitfetch-build", "/home/../../usr/bin/gitfetch")
 
 print(f"Files have been {prGreen('succesfully added')}!")
 
 os.chdir("/usr/bin")
-os.system("ls")
+#os.system("ls")
