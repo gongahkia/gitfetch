@@ -1,6 +1,4 @@
 # TODO
-    # --- * to include in bash script, automatically download pip3, and download pillow, requests via pip3
-    # --- * append lines to User's .bashrc to add program to their file, and add an alias so typing gitfetch is equal to calling the shell executable ./main.sh
     # --- * need to account for users who have multiple newline characters in their user bio
 
 # --- required imports ✔️
