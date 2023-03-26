@@ -1,7 +1,6 @@
-# TODO
-    # --- * consider checking for a given file path when writing the .gitfetchConfig and moving it to another directory to prevent conflict of sudo permissions when writing changes to a file within the usr/bin directory
-    # --- * need to account for users who have multiple newline characters in their user bio
-    # --- * convert github username to be taken as a bash argument the first time
+# NOTE
+    # This is the source code for the main logic behind gitfetch. It has been packaged this way for easier viewing.
+    # ~ Gong 👺
 
 # --- required imports ✔️
 import requests
@@ -39,15 +38,18 @@ yearCurrent:int = int(currentDate.split("-")[0])
 monthCurrent:int = int(currentDate.split("-")[1])
 dayCurrent:int = int(currentDate.split("-")[2])
 
+# --- determines the desired file path to check for the .gitfetchConfig ✔️
+destinationFilePath = f"/home/{os.getcwd().split('/')[2]}/.config/gitfetch-build/bin/.gitfetchConfig"
+
 # --- actual program loop ✔️
 while True:
-    if os.path.isfile(".gitfetchConfig"): # --- set default github username once, then run it automatically after ✔️
-        fhand = open(".gitfetchConfig", "r")
+    if os.path.isfile(destinationFilePath): # --- set default github username once, then run it automatically after ✔️
+        fhand = open(destinationFilePath, "r")
         configFiles = json.load(fhand)
         githubUsername:str = configFiles["username"]
     else:
         githubUsername:str = input("Enter Github Username: ")
-        fhand = open(".gitfetchConfig", "w")
+        fhand = open(destinationFilePath, "w")
         fhand.write('{"username" : "'+ githubUsername + '"}')
         fhand.close()
 
