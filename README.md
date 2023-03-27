@@ -34,7 +34,7 @@ All dependencies are handled by the installer.
 
 ```console
 $ git clone https://github.com/gongahkia/gitfetch
-$ cd installer
+$ cd gitfetch/installer
 $ ./mainInstall.sh
 ```
 # Troubleshooting
