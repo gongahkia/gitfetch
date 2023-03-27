@@ -1,3 +1,2 @@
 # (gitfetch.py)
     # --- * need to account for users who have multiple newline characters in their user bio
-    # --- * convert github username to be taken as a bash argument the first time
