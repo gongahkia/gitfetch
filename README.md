@@ -22,6 +22,14 @@ All dependencies are handled by the installer.
 
 ## Installation
 
+### WSL (Debian, Ubuntu, Fedora)
+
+```console
+> git clone https://github.com/gongahkia/gitfetch
+> cd installer
+> ./mainInstall.sh
+```
+
 ### Linux, MacOS
 
 ```console
@@ -44,8 +52,27 @@ Encountered an issue that isn't covered here? Open an issue or shoot me a messag
 
 ### `ls`, `sudo` and other terminal commands suddenly don't work 😭
 
+> *This might seem daunting, but I believe in you. You got this.*
+
+**Step 1:**  
 ```console
+$ cd ~ && ls -a
 ```
+
+**Step 2:**  
+Check to ensure that the file titled `.bashrc` shows up.
+
+**Step 3:**  
+Use your favourite text editor to insert the string `export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games"` at the **top** of your `.bashrc` file.
+
+**Step 4:**
+```console
+$ nvim .bashrc
+$ cat .bashrc
+```
+
+**Step 5:**
+Check to ensure that the string has been added. End your terminal session and start a new one to reload `.bashrc` file.
 
 ---
 
@@ -65,6 +92,9 @@ Use your favourite text editor to edit the value associated with the *'username'
 
 **Step 4:**  
 ```console
-$ cat .gitfetchConfig
 $ nvim .gitfetchConfig
+$ cat .gitfetchConfig
 ```
+
+**Step 5:**
+Check to ensure that your username has been updated. End your terminal session and start a new one to reload `.gitfetchConfig` file.
