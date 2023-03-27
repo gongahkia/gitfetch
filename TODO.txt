@@ -1,2 +1,0 @@
-# (gitfetch.py)
-    # --- * need to account for users who have multiple newline characters in their user bio
