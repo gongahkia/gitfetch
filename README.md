@@ -45,8 +45,37 @@ Encountered an issue that isn't covered here? Open an issue or shoot me a messag
 
 ### I want to uninstall Gitfetch 😔
 
+**Step 1:**  
+Enter file directory containing `gitfetch` folder intially installed via `git clone`.
+
+**Step 2:**
 ```console
+$ rm -r gitfetch
+$ ls -a
 ```
+
+**Step 3:**  
+Check to ensure the `gitfetch` folder has been deleted.
+
+**Step 4:**
+```console
+$ cd ~ && ls -a
+```
+
+**Step 5:**  
+Check to ensure that the file titled `.bashrc` shows up.
+
+**Step 6:**  
+Use your favourite text editor to remove the following 2 lines (`export PATH=~/.config/gitfetch-build/bin:$PATH`, `alias gitfetch='gitfetch.py`) from the bottom of your `.bashrc` file.
+
+**Step 7:**
+```console
+$ nvim .bashrc
+$ cat .bashrc
+```
+
+**Step 8:**  
+Check to ensure that the 2 lines have been removed. End your terminal session and start a new one to reload `.bashrc` file.
 
 ---
 
@@ -63,7 +92,7 @@ $ cd ~ && ls -a
 Check to ensure that the file titled `.bashrc` shows up.
 
 **Step 3:**  
-Use your favourite text editor to insert the string `export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games"` at the **top** of your `.bashrc` file.
+Use your favourite text editor to insert the line `export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games"` at the **top** of your `.bashrc` file.
 
 **Step 4:**
 ```console
@@ -72,7 +101,7 @@ $ cat .bashrc
 ```
 
 **Step 5:**
-Check to ensure that the string has been added. End your terminal session and start a new one to reload `.bashrc` file.
+Check to ensure that the line has been added. End your terminal session and start a new one to reload `.bashrc` file.
 
 ---
 
