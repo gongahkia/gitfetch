@@ -2,9 +2,6 @@
     # --- * need to account for users who have multiple newline characters in their user bio
     # --- * convert github username to be taken as a bash argument the first time
 
-# (mainInstall.sh)
-    # --- * to include in bash script, automatically download pip3, and download pillow, requests via pip3
-
 # (README.md)
     # --- * add instructions for what to do if you enter the wrong github username and want to edit it
     # --- * uninstallation instructions
