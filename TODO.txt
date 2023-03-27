@@ -1,8 +1,3 @@
 # (gitfetch.py)
     # --- * need to account for users who have multiple newline characters in their user bio
     # --- * convert github username to be taken as a bash argument the first time
-
-# (README.md)
-    # --- * add instructions for what to do if you enter the wrong github username and want to edit it
-    # --- * uninstallation instructions
-    # --- * troubleshooting insturctions regarding what to include in .bashrc if you screw up (refer to bookmarked articles in Firefox CLI tools folder)
