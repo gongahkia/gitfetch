@@ -2,7 +2,7 @@
 
 [Neofetch](https://github.com/dylanaraps/neofetch) for your Github profile. ***Gitfetch*** is optimized for terminals with font size 10.
 
-> A [janky web build](https://github.com/gongahkia/5-days/tree/Main/gitfetch) is available as well.
+> A [web build](https://github.com/gongahkia/5-days/tree/Main/gitfetch) is available as well.
 
 ![](assets/gitfetch.png)
 
