@@ -135,6 +135,6 @@ Check to ensure that your username has been updated. End your terminal session a
 
 ---
 
-## Screenshots:
+## Screenshots
 
 ![](assets/gitfetch-web.png)
