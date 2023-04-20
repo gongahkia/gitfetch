@@ -1,10 +1,8 @@
 # gitfetch 🛻
 
-<img src="assets/gitfetch.png" height="400" align="right"/>
-
 [Neofetch](https://github.com/dylanaraps/neofetch) for your Github profile. ***Gitfetch*** is optimized for terminals with font size 10.
 
-> A [web build](https://github.com/gongahkia/5-days/tree/Main/gitfetch) is available as well.
+> ### THE [WEB BUILD](https://github.com/gongahkia/5-days/tree/Main/gitfetch) IS NOW AVAILABLE.
 
 # Quick start
 
@@ -127,3 +125,9 @@ $ cat .gitfetchConfig
 
 **Step 5:**
 Check to ensure that your username has been updated. End your terminal session and start a new one to reload `.gitfetchConfig` file.
+
+---
+
+## Screenshots:
+
+<img src="assets/gitfetch-web.png"/>
