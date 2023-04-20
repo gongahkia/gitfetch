@@ -4,6 +4,13 @@
 
 > ### THE [WEB BUILD](https://github.com/gongahkia/5-days/tree/Main/gitfetch) IS NOW AVAILABLE.
 
+<h3>Technologies used:</h3>
+
+<p align="left">
+<img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/python/python-original.svg" width="50" height="50"/>
+<img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/bash/bash-original.svg" width="50" height="50"/>
+</p>
+
 # Quick start
 
 ## Prerequisites
