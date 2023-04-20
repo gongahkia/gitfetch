@@ -130,4 +130,4 @@ Check to ensure that your username has been updated. End your terminal session a
 
 ## Screenshots:
 
-<img src="assets/gitfetch-web.png"/>
+![](assets/gitfetch-web.png)
