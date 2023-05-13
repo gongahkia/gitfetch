@@ -1,8 +1,8 @@
+> **THE [WEB BUILD](https://github.com/gongahkia/gitfetch-web) IS NOW AVAILABLE.**
+
 # gitfetch 🛻
 
 [Neofetch](https://github.com/dylanaraps/neofetch) for your Github profile. ***Gitfetch*** is optimized for terminals with font size 10.
-
-> ### THE [WEB BUILD](https://github.com/gongahkia/5-days/tree/Main/gitfetch) IS NOW AVAILABLE.
 
 <h3>Technologies used:</h3>
 
