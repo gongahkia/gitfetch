@@ -1,3 +1,5 @@
+![](https://img.shields.io/badge/gitfetch_1.0-passing-green)
+
 # gitfetch 🛻
 
 [Neofetch](https://github.com/dylanaraps/neofetch) for your Github profile. ***Gitfetch*** is optimized for terminals with font size 10.
