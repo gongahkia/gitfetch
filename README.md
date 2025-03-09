@@ -2,7 +2,7 @@
 
 # gitfetch 🛻
 
-[Neofetch](https://github.com/dylanaraps/neofetch) for your Github profile. ***Gitfetch*** is optimized for terminals with font size 10.
+Serving you snapshots of your Github profile in the CLI. ***Gitfetch*** is optimized for terminals with font size 10.
 
 # Quick start
 
