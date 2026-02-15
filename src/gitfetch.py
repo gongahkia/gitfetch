@@ -39,7 +39,9 @@ monthCurrent:int = int(currentDate.split("-")[1])
 dayCurrent:int = int(currentDate.split("-")[2])
 
 # --- determines the desired file path to check for the .gitfetchConfig ✔️
-destinationFilePath = f"/home/{os.getcwd().split('/')[2]}/.config/gitfetch-build/bin/.gitfetchConfig"
+configDir = os.path.join(os.path.expanduser("~"), ".config", "gitfetch")
+os.makedirs(configDir, exist_ok=True)
+destinationFilePath = os.path.join(configDir, ".gitfetchConfig")
 
 # --- actual program loop ✔️
 while True:
