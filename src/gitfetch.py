@@ -51,9 +51,8 @@ while True:
         githubUsername:str = configFiles["username"]
     else:
         githubUsername:str = input("Enter Github Username: ")
-        fhand = open(destinationFilePath, "w")
-        fhand.write('{"username" : "'+ githubUsername + '"}')
-        fhand.close()
+        with open(destinationFilePath, "w") as fhand:
+            json.dump({"username": githubUsername}, fhand)
 
     githubInfoRetrieval = requests.get(f"https://api.github.com/users/{githubUsername}") 
 
