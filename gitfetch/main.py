@@ -27,6 +27,48 @@ def prLightGray(word):
 def prBlack(word):
     return "\033[98m{}\033[00m" .format(word)
 
+HEATMAP_BLOCKS = [" ", "░", "▒", "▓", "█"]
+
+def fetch_contributions(username, token):
+    """fetch contribution data via GitHub GraphQL API, requires token"""
+    query = """query($login: String!) {
+        user(login: $login) {
+            contributionsCollection {
+                contributionCalendar {
+                    weeks { contributionDays { contributionCount date } }
+                }
+            }
+        }
+    }"""
+    resp = requests.post("https://api.github.com/graphql",
+        json={"query": query, "variables": {"login": username}},
+        headers={"Authorization": f"bearer {token}"})
+    if resp.status_code != 200:
+        return None
+    data = resp.json()
+    try:
+        weeks = data["data"]["user"]["contributionsCollection"]["contributionCalendar"]["weeks"]
+    except (KeyError, TypeError):
+        return None
+    return weeks
+
+def render_heatmap(weeks, num_weeks=12):
+    """render mini heatmap grid from recent weeks using unicode blocks"""
+    recent = weeks[-num_weeks:] if len(weeks) > num_weeks else weeks
+    maxCount = max((d["contributionCount"] for w in recent for d in w["contributionDays"]), default=1) or 1
+    rows = [] # 7 rows (Sun-Sat)
+    for day_idx in range(7):
+        row = ""
+        for week in recent:
+            days = week["contributionDays"]
+            if day_idx < len(days):
+                level = min(4, days[day_idx]["contributionCount"] * 4 // maxCount)
+                row += HEATMAP_BLOCKS[level]
+            else:
+                row += " "
+        rows.append(row)
+    return rows
+
 def main():
     currentDate = datetime.now()
     leastNumberDays = -1
@@ -147,6 +189,15 @@ def main():
             ImgASCII[idx] += line
     ImgASCII = "\n".join(ImgASCII)
     print(ImgASCII)
+
+    # --- contribution heatmap (requires token) ✔️
+    if args.token:
+        weeks = fetch_contributions(githubUsername, args.token)
+        if weeks:
+            heatmap = render_heatmap(weeks)
+            print(f"\n{prGreen('contributions')} (last 12 weeks)")
+            for row in heatmap:
+                print(f"  {row}")
 
 if __name__ == "__main__":
     main()
