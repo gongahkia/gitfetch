@@ -91,6 +91,7 @@ def main():
     parser = argparse.ArgumentParser(description="GitHub user info as ASCII art")
     parser.add_argument("--user", help="GitHub username")
     parser.add_argument("--token", default=os.environ.get("GITHUB_TOKEN", ""), help="GitHub API token (fallback: GITHUB_TOKEN env var)")
+    parser.add_argument("--no-avatar", action="store_true", help="print stats only, skip avatar download")
     args = parser.parse_args()
     headers = {"Authorization": f"token {args.token}"} if args.token else {}
 
@@ -116,24 +117,25 @@ def main():
     userName = userData["login"]
     userBio = userData["bio"]
 
-    tmp = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
-    try:
-        urllib.request.urlretrieve(userData["avatar_url"], tmp.name)
-        avatarImg = Image.open(tmp.name)
-        width, height = avatarImg.size
-        aspect_ratio = height/width
-        new_width = 100
-        new_height = aspect_ratio * new_width * 0.55
-        avatarImg = avatarImg.resize((new_width, int(new_height)))
-        avatarImg = avatarImg.convert("L")
-        pixels = avatarImg.getdata()
-        new_pixels = [chars[pixel//25] for pixel in pixels]
-        new_pixels = "".join(new_pixels)
-        new_pixels_count = len(new_pixels)
-        ImgASCII = [new_pixels[index:index + new_width] for index in range(0, new_pixels_count, new_width)]
-    finally:
-        tmp.close()
-        os.remove(tmp.name)
+    if not args.no_avatar:
+        tmp = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
+        try:
+            urllib.request.urlretrieve(userData["avatar_url"], tmp.name)
+            avatarImg = Image.open(tmp.name)
+            width, height = avatarImg.size
+            aspect_ratio = height/width
+            new_width = 100
+            new_height = aspect_ratio * new_width * 0.55
+            avatarImg = avatarImg.resize((new_width, int(new_height)))
+            avatarImg = avatarImg.convert("L")
+            pixels = avatarImg.getdata()
+            new_pixels = [chars[pixel//25] for pixel in pixels]
+            new_pixels = "".join(new_pixels)
+            new_pixels_count = len(new_pixels)
+            ImgASCII = [new_pixels[index:index + new_width] for index in range(0, new_pixels_count, new_width)]
+        finally:
+            tmp.close()
+            os.remove(tmp.name)
 
     createdAt = datetime.fromisoformat(userData["created_at"].replace("Z", "+00:00"))
     hoursSinceCreation = int((datetime.now(createdAt.tzinfo) - createdAt).total_seconds() / 3600)
@@ -179,23 +181,27 @@ def main():
     langDisplay = ", ".join(f"{l} {b*100//totalBytes}%" for l, b in topLangs)
 
     infoLines = [
-        f"\t\t\t@{prLightPurple(userName)}",
-        "\t\t\t------------",
-        f"\t\t\t{userBio}",
-        f"\t\t\t{hoursSinceCreation} {prRed('hours')} since joining Github",
-        f"\t\t\t{numberOfRepos} {prYellow('public Repos')}",
-        f"\t\t\t{numberOfFollowers} {prGreen('followers')}",
-        f"\t\t\t{leastNumberDays} {prCyan('days')} since last commit",
-        f"\t\t\t{prPurple('langs')} {langDisplay}",
+        f"@{prLightPurple(userName)}",
+        "------------",
+        f"{userBio}",
+        f"{hoursSinceCreation} {prRed('hours')} since joining Github",
+        f"{numberOfRepos} {prYellow('public Repos')}",
+        f"{numberOfFollowers} {prGreen('followers')}",
+        f"{leastNumberDays} {prCyan('days')} since last commit",
+        f"{prPurple('langs')} {langDisplay}",
     ]
-    artHeight = len(ImgASCII)
-    startRow = max(0, (artHeight - len(infoLines)) // 2)
-    for i, line in enumerate(infoLines):
-        idx = startRow + i
-        if idx < artHeight:
-            ImgASCII[idx] += line
-    ImgASCII = "\n".join(ImgASCII)
-    print(ImgASCII)
+
+    if args.no_avatar:
+        for line in infoLines:
+            print(line)
+    else:
+        artHeight = len(ImgASCII)
+        startRow = max(0, (artHeight - len(infoLines)) // 2)
+        for i, line in enumerate(infoLines):
+            idx = startRow + i
+            if idx < artHeight:
+                ImgASCII[idx] += "\t\t\t" + line
+        print("\n".join(ImgASCII))
 
     # --- contribution heatmap (requires token) ✔️
     if args.token:
