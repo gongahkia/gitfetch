@@ -9,7 +9,7 @@ Serving you snapshots of your Github profile in the CLI. ***Gitfetch*** is optim
 
 ## Prerequisites
 
-***Gitfetch*** minimally requires Python3.9+ to be installed. Download [here](https://www.python.org/downloads/). 
+***Gitfetch*** minimally requires Python3.10+ to be installed. Download [here](https://www.python.org/downloads/). 
 
 ## Dependencies
 
@@ -21,21 +21,37 @@ All dependencies are handled by the installer.
 
 ## Installation
 
-### WSL (Debian, Ubuntu, Fedora)
+### pip (recommended)
 
 ```console
-> git clone https://github.com/gongahkia/gitfetch
-> cd gitfetch/installer
-> ./mainInstall.sh
+$ pip install git+https://github.com/gongahkia/gitfetch.git
 ```
 
-### Linux, MacOS
+### Installer script
 
 ```console
 $ git clone https://github.com/gongahkia/gitfetch
 $ cd gitfetch/installer
 $ ./mainInstall.sh
 ```
+
+## Usage
+
+```console
+$ gitfetch                          # uses saved username
+$ gitfetch --user octocat           # specify username
+$ gitfetch --no-avatar              # stats only, no ASCII art
+$ gitfetch --token ghp_xxxx        # authenticated (5000 req/hr)
+```
+
+The `--token` flag also accepts a `GITHUB_TOKEN` environment variable as fallback.
+
+## Features
+
+- ASCII art avatar rendered from your GitHub profile picture
+- Profile stats: hours since joining, public repos, followers, days since last commit
+- Top-5 language breakdown by repository bytes
+- Contribution heatmap (last 12 weeks, requires `--token`)
 # Troubleshooting
 
 Encountered an issue that isn't covered here? Open an issue or shoot me a message on Telegram, and I'll get it sorted asap!
@@ -44,37 +60,11 @@ Encountered an issue that isn't covered here? Open an issue or shoot me a messag
 
 ### I want to uninstall Gitfetch 😔
 
-**Step 1:**  
-Enter file directory containing `gitfetch` folder intially installed via `git clone`.
-
-**Step 2:**
 ```console
-$ rm -r gitfetch
-$ ls -a
+$ pip uninstall gitfetch
 ```
 
-**Step 3:**  
-Check to ensure the `gitfetch` folder has been deleted.
-
-**Step 4:**
-```console
-$ cd ~ && ls -a
-```
-
-**Step 5:**  
-Check to ensure that the file titled `.bashrc` shows up.
-
-**Step 6:**  
-Use your favourite text editor to remove the following 2 lines (`export PATH=~/.config/gitfetch-build/bin:$PATH`, `alias gitfetch='gitfetch.py`) from the bottom of your `.bashrc` file.
-
-**Step 7:**
-```console
-$ nvim .bashrc
-$ cat .bashrc
-```
-
-**Step 8:**  
-Check to ensure that the 2 lines have been removed. End your terminal session and start a new one to reload `.bashrc` file.
+If you installed via the installer script, also remove the `export PATH` line the installer added to your shell rc file (`~/.bashrc`, `~/.zshrc`, or `~/.config/fish/config.fish`).
 
 ---
 
@@ -108,7 +98,7 @@ Check to ensure that the line has been added. End your terminal session and star
 
 **Step 1:**  
 ```console
-$ cd ~/.config/gitfetch-build/bin
+$ cd ~/.config/gitfetch
 $ ls -a
 ```
 
