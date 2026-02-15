@@ -104,14 +104,28 @@ while True:
     dayDiff:int = dayCurrent - dayOfCreation
     hoursSinceCreation:int = abs(((yearDiff - 1) * 365) + (monthDiff * 30) + (dayDiff)) * 24
 
-    # --- number of github repos ✔️
-    githubRepoInfo = requests.get(f"https://api.github.com/users/{githubUsername}/repos")
-    repoData:dict = json.loads(githubRepoInfo.text)
-    numberOfRepos:int = len(repoData)
+    # --- fetch all repos with pagination ✔️
+    repoData = []
+    page = 1
+    while True:
+        resp = requests.get(f"https://api.github.com/users/{githubUsername}/repos", params={"per_page": 100, "page": page})
+        batch = json.loads(resp.text)
+        if not batch:
+            break
+        repoData.extend(batch)
+        page += 1
+    numberOfRepos = len(repoData)
 
-    # --- number of followers and their names (up to 10 displayed) ✔️
-    githubFollowersInfo = requests.get(f"https://api.github.com/users/{githubUsername}/followers")
-    followersData:dict = json.loads(githubFollowersInfo.text)
+    # --- fetch all followers with pagination ✔️
+    followersData = []
+    page = 1
+    while True:
+        resp = requests.get(f"https://api.github.com/users/{githubUsername}/followers", params={"per_page": 100, "page": page})
+        batch = json.loads(resp.text)
+        if not batch:
+            break
+        followersData.extend(batch)
+        page += 1
     numberOfFollowers = len(followersData)
 
     # --- days since last commit/action ✔️
