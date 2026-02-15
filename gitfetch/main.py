@@ -29,6 +29,27 @@ def prBlack(word):
 
 HEATMAP_BLOCKS = [" ", "░", "▒", "▓", "█"]
 
+def api_get(url, **kwargs):
+    """wrapper for requests.get with network error handling"""
+    try:
+        resp = requests.get(url, timeout=15, **kwargs)
+        resp.raise_for_status()
+        return resp
+    except requests.exceptions.ConnectionError:
+        print(f"error: could not connect to {url}")
+        raise SystemExit(1)
+    except requests.exceptions.Timeout:
+        print(f"error: request timed out for {url}")
+        raise SystemExit(1)
+    except requests.exceptions.HTTPError as e:
+        if resp.status_code == 403:
+            print(f"error: rate limited — {resp.json().get('message', '')}")
+        elif resp.status_code == 404:
+            print("error: user not found")
+        else:
+            print(f"error: HTTP {resp.status_code}")
+        raise SystemExit(1)
+
 def fetch_contributions(username, token):
     """fetch contribution data via GitHub GraphQL API, requires token"""
     query = """query($login: String!) {
@@ -94,17 +115,9 @@ def main():
         with open(destinationFilePath, "w") as fhand:
             json.dump({"username": githubUsername}, fhand)
 
-    githubInfoRetrieval = requests.get(f"https://api.github.com/users/{githubUsername}", headers=headers)
-    if githubInfoRetrieval.status_code == 200:
-        print("retrieving...")
-        userData = json.loads(githubInfoRetrieval.text)
-    elif githubInfoRetrieval.status_code == 403:
-        print(githubInfoRetrieval.status_code)
-        print(json.loads(githubInfoRetrieval.text)["message"])
-        return
-    else:
-        print("error retrieving name, please input a valid username")
-        return
+    print("retrieving...")
+    githubInfoRetrieval = api_get(f"https://api.github.com/users/{githubUsername}", headers=headers)
+    userData = githubInfoRetrieval.json()
 
     userName = userData["login"]
     userBio = userData["bio"]
@@ -134,8 +147,8 @@ def main():
     repoData = []
     page = 1
     while True:
-        resp = requests.get(f"https://api.github.com/users/{githubUsername}/repos", params={"per_page": 100, "page": page}, headers=headers)
-        batch = json.loads(resp.text)
+        resp = api_get(f"https://api.github.com/users/{githubUsername}/repos", params={"per_page": 100, "page": page}, headers=headers)
+        batch = resp.json()
         if not batch:
             break
         repoData.extend(batch)
@@ -145,8 +158,8 @@ def main():
     followersData = []
     page = 1
     while True:
-        resp = requests.get(f"https://api.github.com/users/{githubUsername}/followers", params={"per_page": 100, "page": page}, headers=headers)
-        batch = json.loads(resp.text)
+        resp = api_get(f"https://api.github.com/users/{githubUsername}/followers", params={"per_page": 100, "page": page}, headers=headers)
+        batch = resp.json()
         if not batch:
             break
         followersData.extend(batch)
@@ -163,7 +176,7 @@ def main():
     langTotals = {}
     for repo in repoData:
         if repo.get("languages_url"):
-            langResp = requests.get(repo["languages_url"], headers=headers)
+            langResp = api_get(repo["languages_url"], headers=headers)
             if langResp.status_code == 200:
                 for lang, bytes_count in langResp.json().items():
                     langTotals[lang] = langTotals.get(lang, 0) + bytes_count
