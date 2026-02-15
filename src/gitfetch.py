@@ -8,6 +8,7 @@ import urllib.request
 import json
 import os
 import os.path
+import tempfile
 from PIL import Image
 from datetime import date
 
@@ -74,23 +75,24 @@ while True:
     userBio = userData["bio"]
 
     # --- include ASCII art here ✔️   
-    urllib.request.urlretrieve(userData["avatar_url"], "avatar.jpg")
-    avatarImg = Image.open("avatar.jpg")
-    
-    width, height = avatarImg.size
-    aspect_ratio = height/width
-    new_width = 100 # --- default is 120, can be adjusted for greater resolution 
-    new_height = aspect_ratio * new_width * 0.55
-    avatarImg = avatarImg.resize((new_width, int(new_height)))
-
-    avatarImg = avatarImg.convert("L")
-    pixels = avatarImg.getdata()
-
-    new_pixels = [chars[pixel//25] for pixel in pixels]
-    new_pixels = "".join(new_pixels)
-    new_pixels_count = len(new_pixels)
-    ImgASCII = [new_pixels[index:index + new_width] for index in range(0, new_pixels_count, new_width)]
-    os.system("rm avatar.jpg")
+    tmp = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
+    try:
+        urllib.request.urlretrieve(userData["avatar_url"], tmp.name)
+        avatarImg = Image.open(tmp.name)
+        width, height = avatarImg.size
+        aspect_ratio = height/width
+        new_width = 100
+        new_height = aspect_ratio * new_width * 0.55
+        avatarImg = avatarImg.resize((new_width, int(new_height)))
+        avatarImg = avatarImg.convert("L")
+        pixels = avatarImg.getdata()
+        new_pixels = [chars[pixel//25] for pixel in pixels]
+        new_pixels = "".join(new_pixels)
+        new_pixels_count = len(new_pixels)
+        ImgASCII = [new_pixels[index:index + new_width] for index in range(0, new_pixels_count, new_width)]
+    finally:
+        tmp.close()
+        os.remove(tmp.name)
 
     # --- number of hours since creation of account ✔️
     dateOfCreation:str = userData["created_at"].split("T")[0]
