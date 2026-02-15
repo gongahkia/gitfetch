@@ -3,13 +3,15 @@
 
 # gitfetch 🛻
 
-Serving you snapshots of your Github profile in the CLI. ***Gitfetch*** is optimized for terminals with font size 10.
+Serving you snapshots of your [Github](https://github.com/) profile in the [CLI](https://en.wikipedia.org/wiki/Command-line_interface). 
 
 # Quick start
 
 ## Prerequisites
 
-***Gitfetch*** minimally requires Python3.10+ to be installed. Download [here](https://www.python.org/downloads/). 
+`Gitfetch` minimally requires Python3.10+ to be installed. Download [here](https://www.python.org/downloads/). 
+
+Also note that `Gitfetch` is optimized for terminals with font size 10.
 
 ## Dependencies
 
