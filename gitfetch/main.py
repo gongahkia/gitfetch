@@ -10,22 +10,16 @@ from datetime import datetime, date
 
 chars = ["B","S","#","&","@","$","%","*","!",":","."]
 
-def prRed(word):
-    return "\033[91m{}\033[00m" .format(word)
-def prGreen(word):
-    return "\033[92m{}\033[00m" .format(word)
-def prYellow(word):
-    return "\033[93m{}\033[00m" .format(word)
-def prLightPurple(word):
-    return "\033[94m{}\033[00m" .format(word)
-def prPurple(word):
-    return "\033[95m{}\033[00m" .format(word)
-def prCyan(word):
-    return "\033[96m{}\033[00m" .format(word)
-def prLightGray(word):
-    return "\033[97m{}\033[00m" .format(word)
-def prBlack(word):
-    return "\033[98m{}\033[00m" .format(word)
+def color(text, code):
+    return f"\033[{code}m{text}\033[00m"
+def prRed(w): return color(w, 91)
+def prGreen(w): return color(w, 92)
+def prYellow(w): return color(w, 93)
+def prLightPurple(w): return color(w, 94)
+def prPurple(w): return color(w, 95)
+def prCyan(w): return color(w, 96)
+def prLightGray(w): return color(w, 97)
+def prBlack(w): return color(w, 98)
 
 HEATMAP_BLOCKS = [" ", "░", "▒", "▓", "█"]
 
