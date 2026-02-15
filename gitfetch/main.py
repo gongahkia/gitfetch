@@ -149,18 +149,8 @@ def main():
             break
         repoData.extend(batch)
         page += 1
-    numberOfRepos = len(repoData)
-
-    followersData = []
-    page = 1
-    while True:
-        resp = api_get(f"https://api.github.com/users/{githubUsername}/followers", params={"per_page": 100, "page": page}, headers=headers)
-        batch = resp.json()
-        if not batch:
-            break
-        followersData.extend(batch)
-        page += 1
-    numberOfFollowers = len(followersData)
+    numberOfRepos = userData["public_repos"] # from /users/ endpoint directly
+    numberOfFollowers = userData["followers"] # from /users/ endpoint directly
 
     for repo in repoData:
         pushedAt = datetime.fromisoformat(repo["pushed_at"].replace("Z", "+00:00"))
