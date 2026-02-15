@@ -10,7 +10,7 @@ import os
 import os.path
 import tempfile
 from PIL import Image
-from datetime import date
+from datetime import datetime, date
 
 # --- prepwork ✔️
 chars = ["B","S","#","&","@","$","%","*","!",":","."]
@@ -34,10 +34,7 @@ def prLightGray(word):
 def prBlack(word):
     return "\033[98m{}\033[00m" .format(word)
 
-currentDate = str(date.today())
-yearCurrent:int = int(currentDate.split("-")[0])
-monthCurrent:int = int(currentDate.split("-")[1])
-dayCurrent:int = int(currentDate.split("-")[2])
+currentDate = datetime.now()
 
 # --- determines the desired file path to check for the .gitfetchConfig ✔️
 configDir = os.path.join(os.path.expanduser("~"), ".config", "gitfetch")
@@ -95,14 +92,8 @@ while True:
         os.remove(tmp.name)
 
     # --- number of hours since creation of account ✔️
-    dateOfCreation:str = userData["created_at"].split("T")[0]
-    yearOfCreation:int = int(dateOfCreation.split("-")[0])
-    monthOfCreation:int = int(dateOfCreation.split("-")[1])
-    dayOfCreation:int = int(dateOfCreation.split("-")[2])
-    yearDiff:int = yearCurrent - yearOfCreation
-    monthDiff:int = monthCurrent - monthOfCreation
-    dayDiff:int = dayCurrent - dayOfCreation
-    hoursSinceCreation:int = abs(((yearDiff - 1) * 365) + (monthDiff * 30) + (dayDiff)) * 24
+    createdAt = datetime.fromisoformat(userData["created_at"].replace("Z", "+00:00"))
+    hoursSinceCreation = int((datetime.now(createdAt.tzinfo) - createdAt).total_seconds() / 3600)
 
     # --- fetch all repos with pagination ✔️
     repoData = []
@@ -129,13 +120,11 @@ while True:
     numberOfFollowers = len(followersData)
 
     # --- days since last commit/action ✔️
-    currentDateFormatted:date = date(yearCurrent, monthCurrent, dayCurrent)
     for repo in repoData:
-        tempDateList:list = (repo["pushed_at"].split("T")[0]).split("-")
-        givenDateFormatted:date = date(int(tempDateList[0]), int(tempDateList[1]), int(tempDateList[2]))
-        delta = currentDateFormatted - givenDateFormatted
-        if leastNumberDays == -1 or leastNumberDays > delta.days:
-            leastNumberDays = delta.days
+        pushedAt = datetime.fromisoformat(repo["pushed_at"].replace("Z", "+00:00"))
+        delta = (datetime.now(pushedAt.tzinfo) - pushedAt).days
+        if leastNumberDays == -1 or leastNumberDays > delta:
+            leastNumberDays = delta
     
     # --- combining ASCII art and all the collated info ✔️
     ImgASCII[24] += f"\t\t\t@{prLightPurple(userName)}"
