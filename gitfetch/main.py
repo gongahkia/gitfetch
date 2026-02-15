@@ -117,6 +117,18 @@ def main():
         if leastNumberDays == -1 or leastNumberDays > delta:
             leastNumberDays = delta
 
+    # --- top language breakdown ✔️
+    langTotals = {}
+    for repo in repoData:
+        if repo.get("languages_url"):
+            langResp = requests.get(repo["languages_url"], headers=headers)
+            if langResp.status_code == 200:
+                for lang, bytes_count in langResp.json().items():
+                    langTotals[lang] = langTotals.get(lang, 0) + bytes_count
+    totalBytes = sum(langTotals.values()) or 1
+    topLangs = sorted(langTotals.items(), key=lambda x: x[1], reverse=True)[:5]
+    langDisplay = ", ".join(f"{l} {b*100//totalBytes}%" for l, b in topLangs)
+
     infoLines = [
         f"\t\t\t@{prLightPurple(userName)}",
         "\t\t\t------------",
@@ -125,6 +137,7 @@ def main():
         f"\t\t\t{numberOfRepos} {prYellow('public Repos')}",
         f"\t\t\t{numberOfFollowers} {prGreen('followers')}",
         f"\t\t\t{leastNumberDays} {prCyan('days')} since last commit",
+        f"\t\t\t{prPurple('langs')} {langDisplay}",
     ]
     artHeight = len(ImgASCII)
     startRow = max(0, (artHeight - len(infoLines)) // 2)
