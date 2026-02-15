@@ -46,8 +46,8 @@ destinationFilePath = os.path.join(configDir, ".gitfetchConfig")
 # --- actual program loop ✔️
 while True:
     if os.path.isfile(destinationFilePath): # --- set default github username once, then run it automatically after ✔️
-        fhand = open(destinationFilePath, "r")
-        configFiles = json.load(fhand)
+        with open(destinationFilePath, "r") as fhand:
+            configFiles = json.load(fhand)
         githubUsername:str = configFiles["username"]
     else:
         githubUsername:str = input("Enter Github Username: ")
