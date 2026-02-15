@@ -1,58 +1,36 @@
 #!/bin/bash
-
-# colors within Bash prompts ✔️ 
+# gitfetch installer — installs via pip
+set -e
 RED="\e[31m"
 GREEN="\e[32m"
 BLUE="\e[34m"
-GRAY="\e[90m"
 ENDCOLOR="\e[0m"
 
-# check the linux distro of local machine ✔️ 
-function linuxDistro() {
-    if [[ -f /etc/os-release ]]
-    then
-        source /etc/os-release
-        echo $ID
-    fi
-}
+printf "${BLUE}gitfetch installer${ENDCOLOR}\n"
 
-# check OS of local machine, install pip3 accordingly ✔️
-if [[ $OSTYPE == darwin ]]; then
-    printf "OS: ${BLUE}MacOS${ENDCOLOR}\n"
-    curl -O https://bootstrap.pypa.io/ez_setup.py
-    python3 ez_setup.py
-    curl -O https://bootstrap.pypa.io/get-pip.py
-    python3 get-pip.py
-    cd /usr/local/bin
-    ln -s ../../../Library/Frameworks/Python.framework/Versions/3.3/bin/pip pip
-
-elif [[ $OSTYPE == linux-gnu ]]; then
-    case $(linuxDistro) in
-        raspbian)
-            printf "OS: ${BLUE}Linux${ENDCOLOR}\nDistro: ${BLUE}Raspbian${ENDCOLOR}\n"
-            printf "${RED}No support${ENDCOLOR} for Rapsberry Pi OS"
-            ;;
-        fedora)
-            printf "OS: ${BLUE}Linux${ENDCOLOR}\nDistro: ${BLUE}Fedora${ENDCOLOR}\n"
-            sudo dnf install python3-pip
-            ;;
-        ubuntu)
-            printf "OS: ${BLUE}Linux${ENDCOLOR}\nDistro: ${BLUE}Ubuntu/Debian${ENDCOLOR}\n"
-            sudo apt install python3-pip
-            ;;
-        * )
-            printf "OS: ${RED}Not found${ENDCOLOR}\nDistro: ${RED}Not found${ENDCOLOR}\n"
-            ;;
-    esac
+if ! command -v pip3 &> /dev/null; then
+    printf "${RED}pip3 not found${ENDCOLOR}. Please install Python 3 and pip first.\n"
+    exit 1
 fi
 
-# install python3 dependencies via pip3 package manager ✔️
-pip3 install requests
-pip3 install Pillow
+pip3 install --user git+https://github.com/gongahkia/gitfetch.git
 
-# --- appends the two neccesary lines to user's .bashrc file ✔️
-echo "export PATH=~/.config/gitfetch-build/bin:$PATH" >> ~/.bashrc
-echo "alias gitfetch='gitfetch.py'" >> ~/.bashrc
+# detect shell and add to PATH if needed
+SHELL_NAME=$(basename "$SHELL")
+case "$SHELL_NAME" in
+    zsh)  RC_FILE="$HOME/.zshrc" ;;
+    fish) RC_FILE="$HOME/.config/fish/config.fish" ;;
+    *)    RC_FILE="$HOME/.bashrc" ;;
+esac
 
-# --- runs main python installation file to clone gitfetch executable build ✔️
-python3 installation.py
+PIP_BIN=$(python3 -m site --user-base)/bin
+if ! grep -q "$PIP_BIN" "$RC_FILE" 2>/dev/null; then
+    if [[ "$SHELL_NAME" == "fish" ]]; then
+        echo "set -gx PATH $PIP_BIN \$PATH" >> "$RC_FILE"
+    else
+        echo "export PATH=\"$PIP_BIN:\$PATH\"" >> "$RC_FILE"
+    fi
+    printf "Added ${GREEN}$PIP_BIN${ENDCOLOR} to ${BLUE}$RC_FILE${ENDCOLOR}\n"
+fi
+
+printf "${GREEN}gitfetch installed!${ENDCOLOR} Restart your shell, then run: gitfetch\n"
