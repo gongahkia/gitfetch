@@ -9,6 +9,7 @@ import json
 import os
 import os.path
 import tempfile
+import argparse
 from PIL import Image
 from datetime import datetime, date
 
@@ -36,6 +37,13 @@ def prBlack(word):
 
 currentDate = datetime.now()
 
+# --- CLI argument parsing ✔️
+parser = argparse.ArgumentParser(description="GitHub user info as ASCII art")
+parser.add_argument("--user", help="GitHub username")
+parser.add_argument("--token", default=os.environ.get("GITHUB_TOKEN", ""), help="GitHub API token (fallback: GITHUB_TOKEN env var)")
+args = parser.parse_args()
+headers = {"Authorization": f"token {args.token}"} if args.token else {}
+
 # --- determines the desired file path to check for the .gitfetchConfig ✔️
 configDir = os.path.join(os.path.expanduser("~"), ".config", "gitfetch")
 os.makedirs(configDir, exist_ok=True)
@@ -43,16 +51,18 @@ destinationFilePath = os.path.join(configDir, ".gitfetchConfig")
 
 # --- actual program loop ✔️
 while True:
-    if os.path.isfile(destinationFilePath): # --- set default github username once, then run it automatically after ✔️
+    if args.user:
+        githubUsername = args.user
+    elif os.path.isfile(destinationFilePath):
         with open(destinationFilePath, "r") as fhand:
             configFiles = json.load(fhand)
-        githubUsername:str = configFiles["username"]
+        githubUsername = configFiles["username"]
     else:
-        githubUsername:str = input("Enter Github Username: ")
+        githubUsername = input("Enter Github Username: ")
         with open(destinationFilePath, "w") as fhand:
             json.dump({"username": githubUsername}, fhand)
 
-    githubInfoRetrieval = requests.get(f"https://api.github.com/users/{githubUsername}") 
+    githubInfoRetrieval = requests.get(f"https://api.github.com/users/{githubUsername}", headers=headers)
 
     if githubInfoRetrieval.status_code == 200:
         print("retrieving...")
@@ -99,7 +109,7 @@ while True:
     repoData = []
     page = 1
     while True:
-        resp = requests.get(f"https://api.github.com/users/{githubUsername}/repos", params={"per_page": 100, "page": page})
+        resp = requests.get(f"https://api.github.com/users/{githubUsername}/repos", params={"per_page": 100, "page": page}, headers=headers)
         batch = json.loads(resp.text)
         if not batch:
             break
@@ -111,7 +121,7 @@ while True:
     followersData = []
     page = 1
     while True:
-        resp = requests.get(f"https://api.github.com/users/{githubUsername}/followers", params={"per_page": 100, "page": page})
+        resp = requests.get(f"https://api.github.com/users/{githubUsername}/followers", params={"per_page": 100, "page": page}, headers=headers)
         batch = json.loads(resp.text)
         if not batch:
             break
