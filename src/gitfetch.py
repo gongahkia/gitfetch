@@ -127,13 +127,21 @@ while True:
             leastNumberDays = delta
     
     # --- combining ASCII art and all the collated info ✔️
-    ImgASCII[24] += f"\t\t\t@{prLightPurple(userName)}"
-    ImgASCII[25] += "\t\t\t------------"
-    ImgASCII[26] += f"\t\t\t{userBio}"
-    ImgASCII[27] += f"\t\t\t{hoursSinceCreation} {prRed('hours')} since joining Github"
-    ImgASCII[28] += f"\t\t\t{numberOfRepos} {prYellow('public Repos')}"
-    ImgASCII[29] += f"\t\t\t{numberOfFollowers} {prGreen('followers')}"
-    ImgASCII[30] += f"\t\t\t{leastNumberDays} {prCyan('days')} since last commit"
+    infoLines = [
+        f"\t\t\t@{prLightPurple(userName)}",
+        "\t\t\t------------",
+        f"\t\t\t{userBio}",
+        f"\t\t\t{hoursSinceCreation} {prRed('hours')} since joining Github",
+        f"\t\t\t{numberOfRepos} {prYellow('public Repos')}",
+        f"\t\t\t{numberOfFollowers} {prGreen('followers')}",
+        f"\t\t\t{leastNumberDays} {prCyan('days')} since last commit",
+    ]
+    artHeight = len(ImgASCII)
+    startRow = max(0, (artHeight - len(infoLines)) // 2)
+    for i, line in enumerate(infoLines):
+        idx = startRow + i
+        if idx < artHeight:
+            ImgASCII[idx] += line
     ImgASCII = "\n".join(ImgASCII)
 
     print(ImgASCII)
