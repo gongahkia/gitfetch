@@ -1,8 +1,0 @@
-(B) Fetch top-N language breakdown by iterating repos and summing languages_url responses, display as colored bar or percentage list beside ASCII art +feature
-(B) Fetch contribution data from GitHub GraphQL API (contributionsCollection) and render a mini contribution heatmap grid in terminal using Unicode block chars +feature
-(B) Add network error handling: wrap all requests.get() calls in try/except for ConnectionError, Timeout, and HTTPError with user-friendly messages +stability
-(B) Replace json.loads(response.text) with response.json() across all API calls +refactor
-(B) Update installer mainInstall.sh to detect shell (bash/zsh/fish) and append PATH/alias to the correct rc file, or deprecate in favor of pip install instructions +infra
-(B) Consolidate 8 color functions (prRed, prGreen, etc.) into a single color(text, code) function to reduce duplication +refactor
-(B) Add a --no-avatar flag that prints profile stats only (no image download) for fast/lightweight usage in scripts +feature
-(B) Use userData["public_repos"] and userData["followers"] fields from the /users/ endpoint instead of separate API calls, reducing requests from 3 to 1 for basic stats +stability
