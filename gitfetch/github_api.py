@@ -184,8 +184,9 @@ class GitHubClient:
         )[:limit]
 
     def get_events(self, username: str, limit: int = 10) -> list[dict[str, Any]]:
-        return self._paginate(
+        return self._get_json(
             f"/users/{username}/events/public",
+            params={"per_page": limit},
             cache_key=self._cache_key("events", username, str(limit)),
         )[:limit]
 

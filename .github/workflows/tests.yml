@@ -2,7 +2,7 @@ name: Tests
 
 on:
   push:
-    branches: ["main"]
+    branches: ["main", "codex/**"]
   pull_request:
 
 jobs:
@@ -29,6 +29,12 @@ jobs:
 
       - name: Run unit tests
         run: python -m unittest discover -s tests -v
+
+      - name: Run authenticated integration test
+        if: matrix.python-version == '3.12'
+        env:
+          GITFETCH_INTEGRATION_TOKEN: ${{ secrets.GITFETCH_INTEGRATION_TOKEN }}
+        run: python -m unittest discover -s tests -p 'test_integration.py' -v
 
       - name: Smoke test CLI
         run: |
