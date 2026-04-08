@@ -13,7 +13,11 @@ if ! command -v pip3 &> /dev/null; then
     exit 1
 fi
 
-pip3 install --user git+https://github.com/gongahkia/gitfetch.git
+if [[ -n "$VIRTUAL_ENV" ]]; then
+    pip3 install git+https://github.com/gongahkia/gitfetch.git
+else
+    pip3 install --user git+https://github.com/gongahkia/gitfetch.git
+fi
 
 # detect shell and add to PATH if needed
 SHELL_NAME=$(basename "$SHELL")
