@@ -32,6 +32,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--set", action="append", default=[], metavar="KEY=VALUE", help="Override a config value")
     parser.add_argument("--format", choices=["ansi", "plain", "json"], help="Output format override")
     parser.add_argument("--no-avatar", action="store_true", help="Disable avatar rendering for this run")
+    parser.add_argument("--margin", type=int, help="Character-wide margin around the rendered output")
 
     subparsers = parser.add_subparsers(dest="command")
     config_parser = subparsers.add_parser("config", help="Manage gitfetch configuration")
@@ -114,6 +115,10 @@ def handle_render_command(args: argparse.Namespace) -> int:
         config["display"]["format"] = args.format
     if args.no_avatar:
         config["display"]["avatar"] = False
+    if args.margin is not None:
+        if args.margin < 0:
+            raise ConfigError("--margin must be non-negative")
+        config["display"]["margin"] = args.margin
 
     username = config["profile"].get("username", "").strip()
     if not username:
