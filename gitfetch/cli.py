@@ -73,6 +73,9 @@ def build_parser() -> argparse.ArgumentParser:
     compare_parser.add_argument("users", nargs="+", help="Two or more GitHub usernames")
     compare_parser.add_argument("--column-width", type=int, default=40, help="Width per column in characters")
 
+    completions_parser = subparsers.add_parser("completions", help="Print shell completion script")
+    completions_parser.add_argument("shell", choices=["bash", "zsh", "fish"], help="Target shell")
+
     return parser
 
 
@@ -94,6 +97,8 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "compare":
             from gitfetch.modes import handle_compare_command
             return handle_compare_command(args)
+        if args.command == "completions":
+            return handle_completions_command(args)
         return handle_render_command(args)
     except ConfigError as exc:
         print(f"config error: {exc}", file=sys.stderr)
@@ -129,6 +134,12 @@ def handle_modules_command() -> int:
     for name, meta in MODULE_METADATA.items():
         token_note = "token" if meta["token_required"] else "public"
         print(f"{name:16} {token_note:6} {meta['description']}")
+    return 0
+
+
+def handle_completions_command(args: argparse.Namespace) -> int:
+    from gitfetch.completions import script_for
+    print(script_for(args.shell))
     return 0
 
 
