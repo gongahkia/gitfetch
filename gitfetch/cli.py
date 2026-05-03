@@ -37,6 +37,8 @@ def build_parser() -> argparse.ArgumentParser:
     color_group.add_argument("--color", dest="color", action="store_true", default=None, help="Force ANSI colors on (overrides NO_COLOR and TTY detection)")
     color_group.add_argument("--no-color", dest="color", action="store_false", help="Force ANSI colors off")
     parser.add_argument("--theme", choices=sorted(["default", "mono", "solarized", "dracula", "gruvbox", "nord"]), help="Color theme")
+    parser.add_argument("--avatar-style", choices=["ascii", "halfblock", "braille"], help="Avatar rendering style")
+    parser.add_argument("--avatar-color", choices=["none", "256", "truecolor"], help="Avatar color mode")
 
     subparsers = parser.add_subparsers(dest="command")
     config_parser = subparsers.add_parser("config", help="Manage gitfetch configuration")
@@ -129,6 +131,10 @@ def handle_render_command(args: argparse.Namespace) -> int:
         config["_color_force"] = "on"
     elif args.color is False:
         config["_color_force"] = "off"
+    if args.avatar_style:
+        config["display"]["avatar_style"] = args.avatar_style
+    if args.avatar_color:
+        config["display"]["avatar_color"] = args.avatar_color
 
     username = config["profile"].get("username", "").strip()
     if not username:
