@@ -11,7 +11,7 @@ TOP_FLAGS = [
 FORMAT_VALUES = ["ansi", "plain", "json", "svg", "card"]
 THEME_VALUES = ["default", "mono", "solarized", "dracula", "gruvbox", "nord"]
 STYLE_VALUES = ["ascii", "halfblock", "braille"]
-COLOR_VALUES = ["none", "256", "truecolor"]
+COLOR_VALUES = ["auto", "none", "256", "truecolor"]
 MODE_VALUES = ["public", "viewer"]
 
 
