@@ -190,6 +190,15 @@ class GitHubClient:
             cache_key=self._cache_key("events", username, str(limit)),
         )[:limit]
 
+    def get_rate_limit(self) -> dict[str, Any]:
+        try:
+            response = self.session.get("https://api.github.com/rate_limit", timeout=10)
+        except requests.RequestException:
+            return {}
+        if not response.ok:
+            return {}
+        return response.json()
+
     def get_profile_readme(self, username: str) -> str | None:
         cache_key = self._cache_key("profile_readme", username)
         cached = self.cache.get(cache_key)
@@ -219,17 +228,45 @@ class GitHubClient:
         if cached is not None:
             return cached
         query = """
-        query GitFetchProfile($login: String!, $showcaseLimit: Int!) {
+        query GitFetchProfile($login: String!, $showcaseLimit: Int!, $pinnedLimit: Int!) {
           user(login: $login) {
             login
             hasSponsorsListing
             contributionsCollection {
+              totalCommitContributions
+              totalIssueContributions
+              totalPullRequestContributions
+              totalPullRequestReviewContributions
               contributionCalendar {
+                totalContributions
                 weeks {
                   contributionDays {
                     contributionCount
                     date
                   }
+                }
+              }
+            }
+            openPRs: pullRequests(states: OPEN) { totalCount }
+            mergedPRs: pullRequests(states: MERGED) { totalCount }
+            closedPRs: pullRequests(states: CLOSED) { totalCount }
+            openIssues: issues(states: OPEN) { totalCount }
+            closedIssues: issues(states: CLOSED) { totalCount }
+            pinnedItems(first: $pinnedLimit, types: [REPOSITORY, GIST]) {
+              nodes {
+                __typename
+                ... on Repository {
+                  nameWithOwner
+                  description
+                  url
+                  stargazerCount
+                  forkCount
+                  primaryLanguage { name }
+                }
+                ... on Gist {
+                  name
+                  description
+                  url
                 }
               }
             }
@@ -261,7 +298,7 @@ class GitHubClient:
         """
         response = self.session.post(
             "https://api.github.com/graphql",
-            json={"query": query, "variables": {"login": username, "showcaseLimit": 10}},
+            json={"query": query, "variables": {"login": username, "showcaseLimit": 10, "pinnedLimit": 6}},
             timeout=20,
         )
         if response.status_code == 403:

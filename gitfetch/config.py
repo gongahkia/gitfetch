@@ -18,6 +18,12 @@ DEFAULT_MODULE_ORDER = [
 ]
 
 OPTIONAL_MODULES = [
+    "sparkline",
+    "streaks",
+    "pull_requests",
+    "issues",
+    "pinned",
+    "rate_limit",
     "social_accounts",
     "organizations",
     "starred",
@@ -75,6 +81,32 @@ DEFAULT_CONFIG: dict[str, Any] = {
         },
         "contributions": {
             "enabled": True,
+            "hide_if_empty": True,
+        },
+        "sparkline": {
+            "enabled": False,
+            "hide_if_empty": True,
+            "days": 30,
+        },
+        "streaks": {
+            "enabled": False,
+            "hide_if_empty": True,
+        },
+        "pull_requests": {
+            "enabled": False,
+            "hide_if_empty": True,
+        },
+        "issues": {
+            "enabled": False,
+            "hide_if_empty": True,
+        },
+        "pinned": {
+            "enabled": False,
+            "hide_if_empty": True,
+            "limit": 6,
+        },
+        "rate_limit": {
+            "enabled": False,
             "hide_if_empty": True,
         },
         "social_accounts": {
@@ -189,6 +221,12 @@ MODULE_METADATA: dict[str, dict[str, Any]] = {
     "stats": {"token_required": False, "description": "Age, repo counts, followers, and recent activity."},
     "languages": {"token_required": False, "description": "Top languages rolled up across repositories."},
     "contributions": {"token_required": True, "description": "GraphQL contribution heatmap."},
+    "sparkline": {"token_required": True, "description": "Single-line cadence sparkline of recent days."},
+    "streaks": {"token_required": True, "description": "Current and longest contribution streaks."},
+    "pull_requests": {"token_required": True, "description": "Open / merged / closed pull request totals."},
+    "issues": {"token_required": True, "description": "Open / closed issue totals."},
+    "pinned": {"token_required": True, "description": "Pinned repositories and gists from the profile."},
+    "rate_limit": {"token_required": False, "description": "Live API rate-limit usage and reset window."},
     "social_accounts": {"token_required": False, "description": "Public social links from the social accounts API."},
     "organizations": {"token_required": False, "description": "Public organizations the user belongs to."},
     "starred": {"token_required": False, "description": "Recently starred repositories."},
