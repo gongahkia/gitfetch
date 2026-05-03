@@ -9,7 +9,14 @@ TOP_FLAGS = [
     "--offline", "--version", "--help",
 ]
 FORMAT_VALUES = ["ansi", "plain", "json", "svg", "card"]
-THEME_VALUES = ["default", "mono", "solarized", "dracula", "gruvbox", "nord"]
+
+
+def _theme_names() -> list[str]:
+    from gitfetch.render import THEMES
+    return sorted(THEMES.keys())
+
+
+THEME_VALUES = _theme_names()
 STYLE_VALUES = ["ascii", "halfblock", "braille"]
 COLOR_VALUES = ["auto", "none", "256", "truecolor"]
 MODE_VALUES = ["public", "viewer"]

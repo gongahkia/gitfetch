@@ -330,9 +330,10 @@ def normalize_config(config: dict[str, Any]) -> None:
         raise ConfigError("display.heatmap_weeks must be greater than 0")
     if config["display"].get("margin", 0) < 0:
         raise ConfigError("display.margin must be non-negative")
+    from gitfetch.render import THEMES
     theme = config["display"].get("theme", "default")
-    if theme not in {"default", "mono", "solarized", "dracula", "gruvbox", "nord"}:
-        raise ConfigError(f"display.theme '{theme}' is not a known theme")
+    if theme not in THEMES:
+        raise ConfigError(f"display.theme '{theme}' is not a known theme (try one of: {', '.join(sorted(THEMES))})")
     style = config["display"].get("avatar_style", "ascii")
     if style not in {"ascii", "halfblock", "braille"}:
         raise ConfigError(f"display.avatar_style '{style}' is not a known style")
