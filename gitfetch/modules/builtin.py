@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Callable
@@ -8,6 +9,7 @@ from gitfetch.github_api import GitHubClient, GitHubContext, format_relative_day
 
 
 HEATMAP_BLOCKS = [" ", "░", "▒", "▓", "█"]
+SPARKLINE_BLOCKS = [" ", "▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"]
 
 
 @dataclass
@@ -249,11 +251,137 @@ def module_top_repos(config: dict[str, Any], context: GitHubContext, client: Git
     return ModuleResult("top_repos", "Top Repos", lines, data, hidden=not bool(lines))
 
 
+def _flatten_contribution_days(graphql: dict[str, Any]) -> list[dict[str, Any]]:
+    weeks = graphql.get("contributionsCollection", {}).get("contributionCalendar", {}).get("weeks", [])
+    days: list[dict[str, Any]] = []
+    for week in weeks:
+        for day in week.get("contributionDays", []):
+            days.append(day)
+    return days
+
+
+def module_streaks(config: dict[str, Any], context: GitHubContext, client: GitHubClient) -> ModuleResult:
+    days = _flatten_contribution_days(context.graphql)
+    if not days:
+        return ModuleResult("streaks", "Streaks", [], {}, hidden=True, requires_token=True)
+    today_iso = time.strftime("%Y-%m-%d")
+    days_sorted = sorted(days, key=lambda d: d.get("date", ""))
+    longest = current = run = 0
+    for day in days_sorted:
+        if day.get("contributionCount", 0) > 0:
+            run += 1
+            longest = max(longest, run)
+        else:
+            run = 0
+    current = 0
+    for day in reversed(days_sorted):
+        date = day.get("date", "")
+        count = day.get("contributionCount", 0)
+        if not current and date == today_iso and count == 0:
+            continue
+        if count > 0:
+            current += 1
+        else:
+            break
+    total = sum(day.get("contributionCount", 0) for day in days_sorted)
+    contrib = context.graphql.get("contributionsCollection", {})
+    lines = [
+        f"current: {current} day(s)",
+        f"longest: {longest} day(s)",
+        f"year total: {total}",
+    ]
+    if contrib.get("totalCommitContributions") is not None:
+        lines.append(f"commits: {contrib.get('totalCommitContributions', 0)}")
+        lines.append(f"reviews: {contrib.get('totalPullRequestReviewContributions', 0)}")
+    data = {"current": current, "longest": longest, "total": total}
+    return ModuleResult("streaks", "Streaks", lines, data, requires_token=True)
+
+
+def module_pull_requests(config: dict[str, Any], context: GitHubContext, client: GitHubClient) -> ModuleResult:
+    graphql = context.graphql
+    if not graphql:
+        return ModuleResult("pull_requests", "Pull Requests", [], {}, hidden=True, requires_token=True)
+    open_count = (graphql.get("openPRs") or {}).get("totalCount", 0)
+    merged_count = (graphql.get("mergedPRs") or {}).get("totalCount", 0)
+    closed_count = (graphql.get("closedPRs") or {}).get("totalCount", 0)
+    lines = [
+        f"open: {open_count}",
+        f"merged: {merged_count}",
+        f"closed: {closed_count}",
+    ]
+    data = {"open": open_count, "merged": merged_count, "closed": closed_count}
+    return ModuleResult("pull_requests", "Pull Requests", lines, data, requires_token=True)
+
+
+def module_issues(config: dict[str, Any], context: GitHubContext, client: GitHubClient) -> ModuleResult:
+    graphql = context.graphql
+    if not graphql:
+        return ModuleResult("issues", "Issues", [], {}, hidden=True, requires_token=True)
+    open_count = (graphql.get("openIssues") or {}).get("totalCount", 0)
+    closed_count = (graphql.get("closedIssues") or {}).get("totalCount", 0)
+    lines = [f"open: {open_count}", f"closed: {closed_count}"]
+    data = {"open": open_count, "closed": closed_count}
+    return ModuleResult("issues", "Issues", lines, data, requires_token=True)
+
+
+def module_rate_limit(config: dict[str, Any], context: GitHubContext, client: GitHubClient) -> ModuleResult:
+    payload = client.get_rate_limit()
+    core = (payload.get("resources") or {}).get("core") or payload.get("rate") or {}
+    if not core:
+        return ModuleResult("rate_limit", "Rate Limit", [], {}, hidden=True)
+    remaining = core.get("remaining", 0)
+    limit = core.get("limit", 0)
+    reset = core.get("reset")
+    lines = [f"core: {remaining}/{limit}"]
+    if reset:
+        secs = max(0, int(reset) - int(time.time()))
+        lines.append(f"resets in: {secs // 60}m {secs % 60}s")
+    graphql_bucket = (payload.get("resources") or {}).get("graphql") or {}
+    if graphql_bucket:
+        lines.append(f"graphql: {graphql_bucket.get('remaining', 0)}/{graphql_bucket.get('limit', 0)}")
+    return ModuleResult("rate_limit", "Rate Limit", lines, payload)
+
+
+def module_pinned(config: dict[str, Any], context: GitHubContext, client: GitHubClient) -> ModuleResult:
+    nodes = (context.graphql.get("pinnedItems") or {}).get("nodes") or []
+    limit = config["modules"]["pinned"].get("limit", 6)
+    lines: list[str] = []
+    data: list[dict[str, Any]] = []
+    for node in nodes[:limit]:
+        if node.get("__typename") == "Repository":
+            language = (node.get("primaryLanguage") or {}).get("name") or "n/a"
+            stars = node.get("stargazerCount", 0)
+            lines.append(f"{node.get('nameWithOwner')} ({language}, ★{stars})")
+        else:
+            lines.append(f"gist: {node.get('name') or node.get('description') or 'untitled'}")
+        data.append(node)
+    return ModuleResult("pinned", "Pinned", lines, data, hidden=not bool(lines), requires_token=True)
+
+
+def module_sparkline(config: dict[str, Any], context: GitHubContext, client: GitHubClient) -> ModuleResult:
+    days = _flatten_contribution_days(context.graphql)
+    if not days:
+        return ModuleResult("sparkline", "Sparkline", [], {}, hidden=True, requires_token=True)
+    window = int(config["modules"]["sparkline"].get("days", 30))
+    recent = sorted(days, key=lambda d: d.get("date", ""))[-window:]
+    counts = [d.get("contributionCount", 0) for d in recent]
+    peak = max(counts) or 1
+    line = "".join(SPARKLINE_BLOCKS[min(len(SPARKLINE_BLOCKS) - 1, c * (len(SPARKLINE_BLOCKS) - 1) // peak)] for c in counts)
+    lines = [line, f"last {len(counts)} days, peak {peak}"]
+    return ModuleResult("sparkline", "Sparkline", lines, counts, requires_token=True)
+
+
 MODULE_HANDLERS: dict[str, Callable[[dict[str, Any], GitHubContext, GitHubClient], ModuleResult]] = {
     "identity": module_identity,
     "stats": module_stats,
     "languages": module_languages,
     "contributions": module_contributions,
+    "sparkline": module_sparkline,
+    "streaks": module_streaks,
+    "pull_requests": module_pull_requests,
+    "issues": module_issues,
+    "pinned": module_pinned,
+    "rate_limit": module_rate_limit,
     "social_accounts": module_social_accounts,
     "organizations": module_organizations,
     "starred": module_starred,
