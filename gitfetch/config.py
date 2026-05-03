@@ -49,6 +49,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "color": True,
         "layout": "split",
         "show_empty": False,
+        "margin": 0,
     },
     "repo_filters": {
         "exclude_forks": True,
@@ -287,6 +288,8 @@ def normalize_config(config: dict[str, Any]) -> None:
         raise ConfigError("display.avatar_width must be greater than 0")
     if config["display"].get("heatmap_weeks", 0) <= 0:
         raise ConfigError("display.heatmap_weeks must be greater than 0")
+    if config["display"].get("margin", 0) < 0:
+        raise ConfigError("display.margin must be non-negative")
     if config["cache"].get("ttl_seconds", 0) < 0:
         raise ConfigError("cache.ttl_seconds must be non-negative")
 

@@ -56,15 +56,18 @@ def render_output(
 
     enabled_color = bool(config["display"]["color"] and output_format == "ansi")
     lines = module_lines(visible_modules, enabled_color)
+    margin = max(0, int(config["display"].get("margin", 0)))
+    result: str | None = None
     if config["display"].get("avatar") and output_format in {"ansi", "plain"}:
         layout = config["display"].get("layout", "split")
         configured_width = int(config["display"]["avatar_width"])
         term_cols = shutil.get_terminal_size((configured_width, 24)).columns
+        usable_cols = max(0, term_cols - 2 * margin)
         if layout == "split":
             text_width = max((visible_len(line) for line in lines), default=0)
-            available = term_cols - text_width - SPLIT_GAP
+            available = usable_cols - text_width - SPLIT_GAP
         else:
-            available = term_cols
+            available = usable_cols
         if available >= MIN_AVATAR_WIDTH:
             avatar = avatar_to_ascii(
                 user.get("avatar_url"),
@@ -73,9 +76,19 @@ def render_output(
             )
             if avatar:
                 if layout == "split":
-                    return combine_split(avatar, lines)
-                return "\n".join(avatar + [""] + lines)
-    return "\n".join(lines)
+                    result = combine_split(avatar, lines)
+                else:
+                    result = "\n".join(avatar + [""] + lines)
+    if result is None:
+        result = "\n".join(lines)
+    return apply_margin(result, margin)
+
+
+def apply_margin(text: str, margin: int) -> str:
+    if margin <= 0:
+        return text
+    pad = " " * margin
+    return "\n".join(pad + line for line in text.split("\n"))
 
 
 def module_lines(modules: list[ModuleResult], color_enabled: bool) -> list[str]:
