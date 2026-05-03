@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import shutil
 import tempfile
 import urllib.request
 from typing import Any
@@ -20,6 +22,14 @@ COLOR_CODES = {
     "cyan": 96,
     "gray": 97,
 }
+
+ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+SPLIT_GAP = 3
+MIN_AVATAR_WIDTH = 20
+
+
+def visible_len(text: str) -> int:
+    return len(ANSI_RE.sub("", text))
 
 
 def colorize(text: str, code: int, enabled: bool) -> str:
@@ -47,16 +57,24 @@ def render_output(
     enabled_color = bool(config["display"]["color"] and output_format == "ansi")
     lines = module_lines(visible_modules, enabled_color)
     if config["display"].get("avatar") and output_format in {"ansi", "plain"}:
-        avatar = avatar_to_ascii(
-            user.get("avatar_url"),
-            width=config["display"]["avatar_width"],
-            chars=config["display"]["ascii_ramp"],
-        )
-        if avatar:
-            layout = config["display"].get("layout", "split")
-            if layout == "split":
-                return combine_split(avatar, lines)
-            return "\n".join(avatar + [""] + lines)
+        layout = config["display"].get("layout", "split")
+        configured_width = int(config["display"]["avatar_width"])
+        term_cols = shutil.get_terminal_size((configured_width, 24)).columns
+        if layout == "split":
+            text_width = max((visible_len(line) for line in lines), default=0)
+            available = term_cols - text_width - SPLIT_GAP
+        else:
+            available = term_cols
+        if available >= MIN_AVATAR_WIDTH:
+            avatar = avatar_to_ascii(
+                user.get("avatar_url"),
+                width=min(configured_width, available),
+                chars=config["display"]["ascii_ramp"],
+            )
+            if avatar:
+                if layout == "split":
+                    return combine_split(avatar, lines)
+                return "\n".join(avatar + [""] + lines)
     return "\n".join(lines)
 
 
