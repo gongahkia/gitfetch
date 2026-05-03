@@ -290,6 +290,9 @@ def normalize_config(config: dict[str, Any]) -> None:
         raise ConfigError("display.heatmap_weeks must be greater than 0")
     if config["display"].get("margin", 0) < 0:
         raise ConfigError("display.margin must be non-negative")
+    theme = config["display"].get("theme", "default")
+    if theme not in {"default", "mono", "solarized", "dracula", "gruvbox", "nord"}:
+        raise ConfigError(f"display.theme '{theme}' is not a known theme")
     if config["cache"].get("ttl_seconds", 0) < 0:
         raise ConfigError("cache.ttl_seconds must be non-negative")
 

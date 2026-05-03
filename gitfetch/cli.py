@@ -33,6 +33,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--format", choices=["ansi", "plain", "json"], help="Output format override")
     parser.add_argument("--no-avatar", action="store_true", help="Disable avatar rendering for this run")
     parser.add_argument("--margin", type=int, help="Character-wide margin around the rendered output")
+    color_group = parser.add_mutually_exclusive_group()
+    color_group.add_argument("--color", dest="color", action="store_true", default=None, help="Force ANSI colors on (overrides NO_COLOR and TTY detection)")
+    color_group.add_argument("--no-color", dest="color", action="store_false", help="Force ANSI colors off")
+    parser.add_argument("--theme", choices=sorted(["default", "mono", "solarized", "dracula", "gruvbox", "nord"]), help="Color theme")
 
     subparsers = parser.add_subparsers(dest="command")
     config_parser = subparsers.add_parser("config", help="Manage gitfetch configuration")
@@ -119,6 +123,12 @@ def handle_render_command(args: argparse.Namespace) -> int:
         if args.margin < 0:
             raise ConfigError("--margin must be non-negative")
         config["display"]["margin"] = args.margin
+    if args.theme:
+        config["display"]["theme"] = args.theme
+    if args.color is True:
+        config["_color_force"] = "on"
+    elif args.color is False:
+        config["_color_force"] = "off"
 
     username = config["profile"].get("username", "").strip()
     if not username:
