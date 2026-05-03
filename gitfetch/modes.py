@@ -19,6 +19,7 @@ from gitfetch.render import (
     SPLIT_GAP,
     apply_margin,
     color_enabled,
+    effective_avatar_color,
     module_lines,
     palette_for,
     render_avatar,
@@ -94,7 +95,7 @@ def _render_with_lines(
                 avatar_url,
                 width=min(configured_width, available),
                 style=config["display"].get("avatar_style", "ascii"),
-                color_mode=config["display"].get("avatar_color", "none") if color_enabled(config, output_format) else "none",
+                color_mode=effective_avatar_color(config, output_format),
                 ramp=config["display"]["ascii_ramp"],
             )
             if avatar:
@@ -264,7 +265,7 @@ def handle_compare_command(args: argparse.Namespace) -> int:
         term_cols = shutil.get_terminal_size((120, 24)).columns
         budget = term_cols - 2 * margin - gap * (user_count - 1)
         column_width = max(20, budget // user_count)
-    avatar_color = config["display"].get("avatar_color", "none") if enabled_color else "none"
+    avatar_color = effective_avatar_color(config, output_format)
 
     for user_login in args.users:
         try:

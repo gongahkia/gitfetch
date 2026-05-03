@@ -38,7 +38,7 @@ def build_parser() -> argparse.ArgumentParser:
     color_group.add_argument("--no-color", dest="color", action="store_false", help="Force ANSI colors off")
     parser.add_argument("--theme", choices=sorted(["default", "mono", "solarized", "dracula", "gruvbox", "nord"]), help="Color theme")
     parser.add_argument("--avatar-style", choices=["ascii", "halfblock", "braille"], help="Avatar rendering style")
-    parser.add_argument("--avatar-color", choices=["none", "256", "truecolor"], help="Avatar color mode")
+    parser.add_argument("--avatar-color", choices=["auto", "none", "256", "truecolor"], help="Avatar color mode (auto follows --color/--no-color)")
     parser.add_argument("--watch", type=int, metavar="SECS", help="Re-render every N seconds until interrupted")
     cache_group = parser.add_mutually_exclusive_group()
     cache_group.add_argument("--refresh", action="store_true", help="Bypass cache reads for this run")

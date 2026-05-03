@@ -171,13 +171,18 @@ def _paint_value_line(line: str, color_enabled: bool, palette: dict[str, int]) -
     return line
 
 
-def _effective_avatar_color(config: dict[str, Any], output_format: str) -> str:
-    requested = config["display"].get("avatar_color", "none")
+def effective_avatar_color(config: dict[str, Any], output_format: str) -> str:
+    requested = config["display"].get("avatar_color", "auto")
     if requested == "none":
         return "none"
     if not color_enabled(config, output_format):
         return "none"
+    if requested == "auto":
+        return "truecolor"
     return requested
+
+
+_effective_avatar_color = effective_avatar_color
 
 
 def _load_avatar(url: str) -> Image.Image | None:
