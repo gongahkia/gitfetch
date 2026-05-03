@@ -30,7 +30,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--mode", choices=["public", "viewer"], help="Profile data mode override")
     parser.add_argument("--config", dest="config_path", help="Path to config.toml")
     parser.add_argument("--set", action="append", default=[], metavar="KEY=VALUE", help="Override a config value")
-    parser.add_argument("--format", choices=["ansi", "plain", "json"], help="Output format override")
+    parser.add_argument("--format", choices=["ansi", "plain", "json", "svg", "card"], help="Output format override")
     parser.add_argument("--no-avatar", action="store_true", help="Disable avatar rendering for this run")
     parser.add_argument("--margin", type=int, help="Character-wide margin around the rendered output")
     color_group = parser.add_mutually_exclusive_group()
