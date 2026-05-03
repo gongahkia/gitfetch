@@ -6,10 +6,11 @@ from typing import Any
 
 
 class CacheStore:
-    def __init__(self, directory: Path, enabled: bool, ttl_seconds: int) -> None:
+    def __init__(self, directory: Path, enabled: bool, ttl_seconds: int, bypass_read: bool = False) -> None:
         self.directory = directory
         self.enabled = enabled
         self.ttl_seconds = ttl_seconds
+        self.bypass_read = bypass_read
         if self.enabled:
             self.directory.mkdir(parents=True, exist_ok=True)
 
@@ -18,7 +19,7 @@ class CacheStore:
         return self.directory / f"{digest}.json"
 
     def get(self, key: str) -> Any | None:
-        if not self.enabled:
+        if not self.enabled or self.bypass_read:
             return None
         path = self._path_for(key)
         if not path.exists():

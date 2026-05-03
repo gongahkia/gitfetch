@@ -39,6 +39,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--theme", choices=sorted(["default", "mono", "solarized", "dracula", "gruvbox", "nord"]), help="Color theme")
     parser.add_argument("--avatar-style", choices=["ascii", "halfblock", "braille"], help="Avatar rendering style")
     parser.add_argument("--avatar-color", choices=["none", "256", "truecolor"], help="Avatar color mode")
+    parser.add_argument("--watch", type=int, metavar="SECS", help="Re-render every N seconds until interrupted")
+    cache_group = parser.add_mutually_exclusive_group()
+    cache_group.add_argument("--refresh", action="store_true", help="Bypass cache reads for this run")
+    cache_group.add_argument("--offline", action="store_true", help="Read from cache only; fail if anything is missing")
 
     subparsers = parser.add_subparsers(dest="command")
     config_parser = subparsers.add_parser("config", help="Manage gitfetch configuration")
@@ -170,20 +174,45 @@ def handle_render_command(args: argparse.Namespace) -> int:
         cache_dir(),
         enabled=bool(config["cache"]["enabled"]),
         ttl_seconds=int(config["cache"]["ttl_seconds"]),
+        bypass_read=bool(args.refresh),
     )
-    client = GitHubClient(token=token, cache=cache)
-    context = client.get_context(
-        username=username,
-        mode=config["profile"]["mode"],
-        repo_filters=config["repo_filters"],
-    )
-    module_results = []
-    for name in build_module_list(config):
-        result = MODULE_HANDLERS[name](config, context, client)
-        hide_if_empty = config["modules"].get(name, {}).get("hide_if_empty", True)
-        if hide_if_empty and not result.lines:
-            result.hidden = True
-        module_results.append(result)
-    output_format = args.format or config["display"].get("format", "ansi")
-    print(render_output(config, context.user, module_results, output_format))
+    client = GitHubClient(token=token, cache=cache, offline=bool(args.offline))
+
+    def render_once() -> None:
+        context = client.get_context(
+            username=username,
+            mode=config["profile"]["mode"],
+            repo_filters=config["repo_filters"],
+        )
+        module_results = []
+        for name in build_module_list(config):
+            result = MODULE_HANDLERS[name](config, context, client)
+            hide_if_empty = config["modules"].get(name, {}).get("hide_if_empty", True)
+            if hide_if_empty and not result.lines:
+                result.hidden = True
+            module_results.append(result)
+        output_format = args.format or config["display"].get("format", "ansi")
+        print(render_output(config, context.user, module_results, output_format))
+
+    if args.watch:
+        if args.watch < 1:
+            raise ConfigError("--watch interval must be at least 1 second")
+        run_watch_loop(render_once, args.watch)
+        return 0
+    render_once()
     return 0
+
+
+def run_watch_loop(render_once, interval: int) -> None:
+    import time
+    try:
+        while True:
+            sys.stdout.write("\x1b[H\x1b[2J")
+            sys.stdout.flush()
+            try:
+                render_once()
+            except GitHubAPIError as exc:
+                print(f"api error: {exc}", file=sys.stderr)
+            time.sleep(interval)
+    except KeyboardInterrupt:
+        pass
