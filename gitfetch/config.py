@@ -50,6 +50,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "layout": "split",
         "show_empty": False,
         "margin": 0,
+        "avatar_style": "ascii",
+        "avatar_color": "none",
     },
     "repo_filters": {
         "exclude_forks": True,
@@ -293,6 +295,12 @@ def normalize_config(config: dict[str, Any]) -> None:
     theme = config["display"].get("theme", "default")
     if theme not in {"default", "mono", "solarized", "dracula", "gruvbox", "nord"}:
         raise ConfigError(f"display.theme '{theme}' is not a known theme")
+    style = config["display"].get("avatar_style", "ascii")
+    if style not in {"ascii", "halfblock", "braille"}:
+        raise ConfigError(f"display.avatar_style '{style}' is not a known style")
+    color_mode = config["display"].get("avatar_color", "none")
+    if color_mode not in {"none", "256", "truecolor"}:
+        raise ConfigError(f"display.avatar_color '{color_mode}' must be none, 256, or truecolor")
     if config["cache"].get("ttl_seconds", 0) < 0:
         raise ConfigError("cache.ttl_seconds must be non-negative")
 
