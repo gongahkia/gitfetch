@@ -190,6 +190,47 @@ class GitHubClient:
             cache_key=self._cache_key("events", username, str(limit)),
         )[:limit]
 
+    def get_repo(self, owner: str, name: str) -> dict[str, Any]:
+        return self._get_json(
+            f"/repos/{owner}/{name}",
+            cache_key=self._cache_key("repo", owner, name),
+        )
+
+    def get_repo_languages(self, owner: str, name: str) -> dict[str, int]:
+        return self.get_languages(f"https://api.github.com/repos/{owner}/{name}/languages")
+
+    def get_repo_contributors(self, owner: str, name: str, limit: int = 10) -> list[dict[str, Any]]:
+        return self._paginate(
+            f"/repos/{owner}/{name}/contributors",
+            cache_key=self._cache_key("repo_contributors", owner, name),
+        )[:limit]
+
+    def get_repo_commits(self, owner: str, name: str, limit: int = 5) -> list[dict[str, Any]]:
+        return self._get_json(
+            f"/repos/{owner}/{name}/commits",
+            params={"per_page": limit},
+            cache_key=self._cache_key("repo_commits", owner, name, str(limit)),
+        )[:limit]
+
+    def get_org(self, name: str) -> dict[str, Any]:
+        return self._get_json(
+            f"/orgs/{name}",
+            cache_key=self._cache_key("org", name),
+        )
+
+    def get_org_members(self, name: str, limit: int = 10) -> list[dict[str, Any]]:
+        return self._paginate(
+            f"/orgs/{name}/members",
+            cache_key=self._cache_key("org_members", name),
+        )[:limit]
+
+    def get_org_repos(self, name: str) -> list[dict[str, Any]]:
+        return self._paginate(
+            f"/orgs/{name}/repos",
+            params={"sort": "updated"},
+            cache_key=self._cache_key("org_repos", name),
+        )
+
     def get_rate_limit(self) -> dict[str, Any]:
         try:
             response = self.session.get("https://api.github.com/rate_limit", timeout=10)

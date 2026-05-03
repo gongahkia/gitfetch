@@ -55,6 +55,20 @@ def build_parser() -> argparse.ArgumentParser:
     modules_subparsers = modules_parser.add_subparsers(dest="modules_command", required=True)
     modules_subparsers.add_parser("list", help="List supported modules")
 
+    repo_parser = subparsers.add_parser("repo", help="Render a repository profile")
+    repo_parser.add_argument("target", help="Repository in OWNER/NAME form")
+    repo_parser.add_argument("--contributors-limit", type=int, default=10)
+    repo_parser.add_argument("--commits-limit", type=int, default=5)
+
+    org_parser = subparsers.add_parser("org", help="Render an organization profile")
+    org_parser.add_argument("target", help="Organization login")
+    org_parser.add_argument("--members-limit", type=int, default=10)
+    org_parser.add_argument("--repos-limit", type=int, default=8)
+
+    compare_parser = subparsers.add_parser("compare", help="Render multiple users side-by-side")
+    compare_parser.add_argument("users", nargs="+", help="Two or more GitHub usernames")
+    compare_parser.add_argument("--column-width", type=int, default=40, help="Width per column in characters")
+
     return parser
 
 
@@ -67,6 +81,15 @@ def main(argv: list[str] | None = None) -> int:
             return handle_config_command(args)
         if args.command == "modules":
             return handle_modules_command()
+        if args.command == "repo":
+            from gitfetch.modes import handle_repo_command
+            return handle_repo_command(args)
+        if args.command == "org":
+            from gitfetch.modes import handle_org_command
+            return handle_org_command(args)
+        if args.command == "compare":
+            from gitfetch.modes import handle_compare_command
+            return handle_compare_command(args)
         return handle_render_command(args)
     except ConfigError as exc:
         print(f"config error: {exc}", file=sys.stderr)
