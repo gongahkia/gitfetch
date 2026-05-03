@@ -66,8 +66,9 @@ def _client_for(args: argparse.Namespace, config: dict[str, Any]) -> GitHubClien
         cache_dir(),
         enabled=bool(config["cache"]["enabled"]),
         ttl_seconds=int(config["cache"]["ttl_seconds"]),
+        bypass_read=bool(getattr(args, "refresh", False)),
     )
-    return GitHubClient(token=token, cache=cache)
+    return GitHubClient(token=token, cache=cache, offline=bool(getattr(args, "offline", False)))
 
 
 def _render_with_lines(

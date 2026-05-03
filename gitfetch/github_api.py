@@ -27,9 +27,10 @@ class GitHubContext:
 
 
 class GitHubClient:
-    def __init__(self, token: str, cache: CacheStore) -> None:
+    def __init__(self, token: str, cache: CacheStore, offline: bool = False) -> None:
         self.token = token
         self.cache = cache
+        self.offline = offline
         self.session = requests.Session()
         self.session.headers.update(
             {
@@ -80,6 +81,8 @@ class GitHubClient:
             cached = self.cache.get(cache_key)
             if cached is not None:
                 return cached
+        if self.offline:
+            raise GitHubAPIError(f"offline mode: {path} not available in cache")
         response = self.session.get(f"https://api.github.com{path}", params=params, timeout=20)
         if response.status_code == 404:
             raise GitHubAPIError("GitHub user or resource not found")
@@ -99,6 +102,8 @@ class GitHubClient:
             cached = self.cache.get(cache_key)
             if cached is not None:
                 return cached
+        if self.offline:
+            raise GitHubAPIError(f"offline mode: {path} not available in cache")
         merged_params = dict(params or {})
         merged_params["per_page"] = 100
         page = 1
@@ -144,6 +149,8 @@ class GitHubClient:
         cached = self.cache.get(cache_key)
         if cached is not None:
             return cached
+        if self.offline:
+            raise GitHubAPIError(f"offline mode: {languages_url} not available in cache")
         response = self.session.get(languages_url, timeout=20)
         if response.status_code == 403:
             raise GitHubAPIError(f"GitHub rate limited request: {response.json().get('message', '')}")
@@ -232,6 +239,8 @@ class GitHubClient:
         )
 
     def get_rate_limit(self) -> dict[str, Any]:
+        if self.offline:
+            return {}
         try:
             response = self.session.get("https://api.github.com/rate_limit", timeout=10)
         except requests.RequestException:
@@ -245,6 +254,8 @@ class GitHubClient:
         cached = self.cache.get(cache_key)
         if cached is not None:
             return cached
+        if self.offline:
+            return None
         response = self.session.get(
             f"https://api.github.com/repos/{username}/{username}/readme",
             timeout=20,
@@ -268,6 +279,8 @@ class GitHubClient:
         cached = self.cache.get(cache_key)
         if cached is not None:
             return cached
+        if self.offline:
+            return {}
         query = """
         query GitFetchProfile($login: String!, $showcaseLimit: Int!, $pinnedLimit: Int!) {
           user(login: $login) {
