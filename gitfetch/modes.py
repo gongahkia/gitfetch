@@ -256,7 +256,14 @@ def handle_compare_command(args: argparse.Namespace) -> int:
     avatars: list[list[str]] = []
     margin = max(0, int(config["display"].get("margin", 0)))
 
-    column_width = max(20, args.column_width)
+    user_count = len(args.users)
+    gap = 4
+    if args.column_width is not None:
+        column_width = max(20, args.column_width)
+    else:
+        term_cols = shutil.get_terminal_size((120, 24)).columns
+        budget = term_cols - 2 * margin - gap * (user_count - 1)
+        column_width = max(20, budget // user_count)
     avatar_color = config["display"].get("avatar_color", "none") if enabled_color else "none"
 
     for user_login in args.users:
