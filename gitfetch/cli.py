@@ -71,7 +71,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     compare_parser = subparsers.add_parser("compare", help="Render multiple users side-by-side")
     compare_parser.add_argument("users", nargs="+", help="Two or more GitHub usernames")
-    compare_parser.add_argument("--column-width", type=int, default=40, help="Width per column in characters")
+    compare_parser.add_argument("--column-width", type=int, default=None, help="Width per column in characters (default: auto-fit terminal)")
 
     completions_parser = subparsers.add_parser("completions", help="Print shell completion script")
     completions_parser.add_argument("shell", choices=["bash", "zsh", "fish"], help="Target shell")

@@ -91,7 +91,7 @@ def render_output(
         return render_card_svg(config, user, visible_modules)
     if output_format == "svg":
         from gitfetch.formats import render_terminal_svg
-        forced = {**config, "_color_force": "on"}
+        forced = {**config, "_color_force": "on", "_skip_terminal_clamp": True}
         return render_terminal_svg(_render_visual(forced, user, visible_modules, "ansi"), config)
     return _render_visual(config, user, visible_modules, output_format)
 
@@ -110,13 +110,16 @@ def _render_visual(
     if config["display"].get("avatar") and output_format in {"ansi", "plain"}:
         layout = config["display"].get("layout", "split")
         configured_width = int(config["display"]["avatar_width"])
-        term_cols = shutil.get_terminal_size((configured_width, 24)).columns
-        usable_cols = max(0, term_cols - 2 * margin)
-        if layout == "split":
-            text_width = max((visible_len(line) for line in lines), default=0)
-            available = usable_cols - text_width - SPLIT_GAP
+        if config.get("_skip_terminal_clamp"):
+            available = configured_width
         else:
-            available = usable_cols
+            term_cols = shutil.get_terminal_size((configured_width, 24)).columns
+            usable_cols = max(0, term_cols - 2 * margin)
+            if layout == "split":
+                text_width = max((visible_len(line) for line in lines), default=0)
+                available = usable_cols - text_width - SPLIT_GAP
+            else:
+                available = usable_cols
         if available >= MIN_AVATAR_WIDTH:
             avatar = render_avatar(
                 user.get("avatar_url"),
