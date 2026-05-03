@@ -86,7 +86,22 @@ def render_output(
             },
             indent=2,
         )
+    if output_format == "card":
+        from gitfetch.formats import render_card_svg
+        return render_card_svg(config, user, visible_modules)
+    if output_format == "svg":
+        from gitfetch.formats import render_terminal_svg
+        forced = {**config, "_color_force": "on"}
+        return render_terminal_svg(_render_visual(forced, user, visible_modules, "ansi"), config)
+    return _render_visual(config, user, visible_modules, output_format)
 
+
+def _render_visual(
+    config: dict[str, Any],
+    user: dict[str, Any],
+    visible_modules: list[ModuleResult],
+    output_format: str,
+) -> str:
     enabled_color = color_enabled(config, output_format)
     palette = palette_for(config)
     lines = module_lines(visible_modules, enabled_color, palette)
