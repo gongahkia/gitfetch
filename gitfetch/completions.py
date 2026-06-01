@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 
-COMMANDS = ["config", "modules", "repo", "org", "compare", "completions"]
+COMMANDS = ["config", "modules", "repo", "org", "compare", "completions", "token"]
 TOP_FLAGS = [
-    "--user", "--token", "--mode", "--config", "--set", "--format",
-    "--no-avatar", "--margin", "--color", "--no-color", "--theme",
+    "--user", "--profile", "--token", "--mode", "--config", "--set", "--format",
+    "--save", "--no-avatar", "--margin", "--color", "--no-color", "--theme",
     "--avatar-style", "--avatar-color", "--watch", "--refresh",
     "--offline", "--version", "--help",
 ]
-FORMAT_VALUES = ["ansi", "plain", "json", "svg", "card"]
+FORMAT_VALUES = ["ansi", "plain", "json", "svg", "card", "png"]
 
 
 def _theme_names() -> list[str]:
@@ -54,11 +54,13 @@ _gitfetch() {{
     cmds=({commands_zsh})
     _arguments -C \\
         '--user[GitHub username]:user:' \\
+        '--profile[Saved profile name]:profile:' \\
         '--token[GitHub token]:token:' \\
         '--mode[Profile mode]:mode:({modes})' \\
         '--config[Path to config.toml]:file:_files' \\
         '--set[Override config value]:override:' \\
         '--format[Output format]:format:({formats})' \\
+        '--save[Write output to file]:file:_files' \\
         '--no-avatar[Disable avatar]' \\
         '--margin[Character margin]:n:' \\
         '--color[Force colors on]' \\
@@ -82,11 +84,13 @@ compdef _gitfetch gitfetch
 FISH = """\
 complete -c gitfetch -n "__fish_use_subcommand" -a "{commands}"
 complete -c gitfetch -l user -x -d "GitHub username"
+complete -c gitfetch -l profile -x -d "Saved profile name"
 complete -c gitfetch -l token -x -d "GitHub token"
 complete -c gitfetch -l mode -x -a "{modes}" -d "Profile mode"
 complete -c gitfetch -l config -F -d "Path to config.toml"
 complete -c gitfetch -l set -x -d "Override KEY=VALUE"
 complete -c gitfetch -l format -x -a "{formats}" -d "Output format"
+complete -c gitfetch -l save -F -d "Write output to file"
 complete -c gitfetch -l no-avatar -d "Disable avatar"
 complete -c gitfetch -l margin -x -d "Character margin"
 complete -c gitfetch -l color -d "Force colors on"

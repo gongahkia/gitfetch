@@ -7,7 +7,7 @@ from pathlib import Path
 from gitfetch import __version__
 from gitfetch.cache import CacheStore
 from gitfetch.config import (
-    MODULE_METADATA,
+    apply_named_profile,
     config_path,
     cache_dir,
     get_token,
@@ -18,7 +18,8 @@ from gitfetch.config import (
     ConfigError,
 )
 from gitfetch.github_api import GitHubAPIError, GitHubClient
-from gitfetch.modules import MODULE_HANDLERS, build_module_list
+from gitfetch.modules import MODULE_HANDLERS, available_module_metadata, build_module_list, load_plugin_modules
+from gitfetch.modules.builtin import ModuleResult
 from gitfetch.render import render_output
 
 
@@ -26,11 +27,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Configurable GitHub profile fetch for the terminal")
     parser.add_argument("--version", action="version", version=f"gitfetch {__version__}")
     parser.add_argument("--user", help="GitHub username override")
+    parser.add_argument("--profile", help="Saved profile name from config.toml")
     parser.add_argument("--token", help="GitHub token override")
     parser.add_argument("--mode", choices=["public", "viewer"], help="Profile data mode override")
     parser.add_argument("--config", dest="config_path", help="Path to config.toml")
     parser.add_argument("--set", action="append", default=[], metavar="KEY=VALUE", help="Override a config value")
-    parser.add_argument("--format", choices=["ansi", "plain", "json", "svg", "card"], help="Output format override")
+    parser.add_argument("--format", choices=["ansi", "plain", "json", "svg", "card", "png"], help="Output format override")
+    parser.add_argument("--save", help="Write output to a file instead of stdout (required for --format png)")
     parser.add_argument("--no-avatar", action="store_true", help="Disable avatar rendering for this run")
     parser.add_argument("--margin", type=int, help="Character-wide margin around the rendered output")
     color_group = parser.add_mutually_exclusive_group()
@@ -53,8 +56,23 @@ def build_parser() -> argparse.ArgumentParser:
     config_init.add_argument("--preset", choices=["minimal", "compact", "full", "showcase"], default="compact")
     config_init.add_argument("--force", action="store_true", help="Overwrite an existing config.toml")
 
+    config_wizard = config_subparsers.add_parser("wizard", help="Interactively write a config.toml")
+    config_wizard.add_argument("--force", action="store_true", help="Overwrite an existing config.toml")
+
     config_subparsers.add_parser("path", help="Print the config path")
     config_subparsers.add_parser("validate", help="Validate config.toml")
+
+    profiles_parser = config_subparsers.add_parser("profiles", help="Manage saved profiles")
+    profiles_subparsers = profiles_parser.add_subparsers(dest="profiles_command", required=True)
+    profiles_subparsers.add_parser("list", help="List saved profiles")
+    profile_set = profiles_subparsers.add_parser("set", help="Create or update a saved profile")
+    profile_set.add_argument("name")
+    profile_set.add_argument("--user", required=True, help="GitHub username for the profile")
+    profile_set.add_argument("--mode", choices=["public", "viewer"], default="public")
+    profile_set.add_argument("--token-env", default="GITHUB_TOKEN")
+    profile_set.add_argument("--token-command", default="")
+    profile_remove = profiles_subparsers.add_parser("remove", help="Remove a saved profile")
+    profile_remove.add_argument("name")
 
     modules_parser = subparsers.add_parser("modules", help="Inspect available modules")
     modules_subparsers = modules_parser.add_subparsers(dest="modules_command", required=True)
@@ -77,6 +95,22 @@ def build_parser() -> argparse.ArgumentParser:
     completions_parser = subparsers.add_parser("completions", help="Print shell completion script")
     completions_parser.add_argument("shell", choices=["bash", "zsh", "fish"], help="Target shell")
 
+    token_parser = subparsers.add_parser("token", help="Store or inspect a token in macOS Keychain")
+    token_subparsers = token_parser.add_subparsers(dest="token_command", required=True)
+    token_store = token_subparsers.add_parser("store", help="Store a token in macOS Keychain")
+    token_store.add_argument("--service", default="gitfetch")
+    token_store.add_argument("--account", default="gitfetch")
+    token_store.add_argument("--token", help="Token value; prompts securely when omitted")
+    token_get = token_subparsers.add_parser("get", help="Print a token from macOS Keychain")
+    token_get.add_argument("--service", default="gitfetch")
+    token_get.add_argument("--account", default="gitfetch")
+    token_status = token_subparsers.add_parser("status", help="Report whether a token is stored")
+    token_status.add_argument("--service", default="gitfetch")
+    token_status.add_argument("--account", default="gitfetch")
+    token_delete = token_subparsers.add_parser("delete", help="Delete a token from macOS Keychain")
+    token_delete.add_argument("--service", default="gitfetch")
+    token_delete.add_argument("--account", default="gitfetch")
+
     return parser
 
 
@@ -88,7 +122,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "config":
             return handle_config_command(args)
         if args.command == "modules":
-            return handle_modules_command()
+            return handle_modules_command(args)
         if args.command == "repo":
             from gitfetch.modes import handle_repo_command
             return handle_repo_command(args)
@@ -100,6 +134,8 @@ def main(argv: list[str] | None = None) -> int:
             return handle_compare_command(args)
         if args.command == "completions":
             return handle_completions_command(args)
+        if args.command == "token":
+            return handle_token_command(args)
         return handle_render_command(args)
     except ConfigError as exc:
         print(f"config error: {exc}", file=sys.stderr)
@@ -115,7 +151,8 @@ def handle_config_command(args: argparse.Namespace) -> int:
         print(path)
         return 0
     if args.config_command == "validate":
-        load_config(path)
+        config = load_config(path)
+        load_plugin_modules(config)
         print(f"valid: {path}")
         return 0
     if args.config_command == "init":
@@ -128,11 +165,76 @@ def handle_config_command(args: argparse.Namespace) -> int:
         write_config(path, config)
         print(f"wrote {path} using preset '{args.preset}'")
         return 0
+    if args.config_command == "wizard":
+        if path.exists() and not args.force:
+            raise ConfigError(f"{path} already exists (use --force to overwrite)")
+        config = run_config_wizard()
+        write_config(path, config)
+        print(f"wrote {path}")
+        return 0
+    if args.config_command == "profiles":
+        return handle_profiles_command(args, path)
     raise ConfigError("unknown config command")
 
 
-def handle_modules_command() -> int:
-    for name, meta in MODULE_METADATA.items():
+def run_config_wizard() -> dict:
+    username = input("GitHub username: ").strip()
+    preset = input("Preset [compact/minimal/full/showcase] (compact): ").strip() or "compact"
+    if preset not in {"minimal", "compact", "full", "showcase"}:
+        raise ConfigError(f"unknown preset: {preset}")
+    avatar_raw = input("Show avatar? [Y/n]: ").strip().lower()
+    output_format = input("Default format [ansi/plain/json/svg/card] (ansi): ").strip() or "ansi"
+    if output_format not in {"ansi", "plain", "json", "svg", "card"}:
+        raise ConfigError(f"unsupported format: {output_format}")
+    token_env = input("Token env var (GITHUB_TOKEN): ").strip() or "GITHUB_TOKEN"
+    config = preset_config(preset)
+    config["profile"]["username"] = username
+    config["profile"]["token_env"] = token_env
+    config["display"]["avatar"] = avatar_raw not in {"n", "no", "false", "0"}
+    config["display"]["format"] = output_format
+    return config
+
+
+def handle_profiles_command(args: argparse.Namespace, path: Path) -> int:
+    config = load_config(path)
+    profiles = config.setdefault("profiles", {})
+    if args.profiles_command == "list":
+        if not profiles:
+            print("no saved profiles")
+            return 0
+        for name in sorted(profiles):
+            profile = profiles[name]
+            username = profile.get("username", "")
+            mode = profile.get("mode", "public")
+            token_env = profile.get("token_env", "GITHUB_TOKEN")
+            token_command = " token-command" if profile.get("token_command") else ""
+            print(f"{name:16} {username:20} {mode:6} {token_env}{token_command}")
+        return 0
+    if args.profiles_command == "set":
+        profiles[args.name] = {
+            "username": args.user,
+            "mode": args.mode,
+            "token_env": args.token_env,
+            "token_command": args.token_command,
+        }
+        write_config(path, config)
+        print(f"saved profile '{args.name}'")
+        return 0
+    if args.profiles_command == "remove":
+        if args.name not in profiles:
+            raise ConfigError(f"unknown profile '{args.name}'")
+        del profiles[args.name]
+        write_config(path, config)
+        print(f"removed profile '{args.name}'")
+        return 0
+    raise ConfigError("unknown profiles command")
+
+
+def handle_modules_command(args: argparse.Namespace) -> int:
+    path = Path(args.config_path) if getattr(args, "config_path", None) else config_path()
+    config = load_config(path)
+    load_plugin_modules(config)
+    for name, meta in available_module_metadata().items():
         token_note = "token" if meta["token_required"] else "public"
         print(f"{name:16} {token_note:6} {meta['description']}")
     return 0
@@ -144,9 +246,101 @@ def handle_completions_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def handle_token_command(args: argparse.Namespace) -> int:
+    import getpass
+    import platform
+    import shutil
+    import subprocess
+
+    if platform.system() != "Darwin" or not shutil.which("security"):
+        raise ConfigError("token keychain commands require macOS and the security CLI")
+
+    base = ["security"]
+    account = args.account
+    service = args.service
+    if args.token_command == "store":
+        token = args.token or getpass.getpass("GitHub token: ").strip()
+        if not token:
+            raise ConfigError("empty token")
+        result = subprocess.run(
+            base + ["add-generic-password", "-U", "-a", account, "-s", service, "-w", token],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            raise ConfigError(result.stderr.strip() or "failed to store token")
+        print(f"stored token for service '{service}' account '{account}'")
+        return 0
+    if args.token_command == "get":
+        result = subprocess.run(
+            base + ["find-generic-password", "-a", account, "-s", service, "-w"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            raise ConfigError("no token stored")
+        print(result.stdout.strip())
+        return 0
+    if args.token_command == "status":
+        result = subprocess.run(
+            base + ["find-generic-password", "-a", account, "-s", service],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        print("stored" if result.returncode == 0 else "not stored")
+        return 0
+    if args.token_command == "delete":
+        result = subprocess.run(
+            base + ["delete-generic-password", "-a", account, "-s", service],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            raise ConfigError("no token stored")
+        print(f"deleted token for service '{service}' account '{account}'")
+        return 0
+    raise ConfigError("unknown token command")
+
+
+def _write_or_print(text: str, args: argparse.Namespace) -> None:
+    if getattr(args, "save", None):
+        path = Path(args.save)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+        print(f"wrote {path}")
+    else:
+        print(text)
+
+
+def _png_output_path(args: argparse.Namespace) -> Path:
+    if not getattr(args, "save", None):
+        raise ConfigError("--save is required for --format png")
+    path = Path(args.save)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _token_required_result(name: str) -> ModuleResult:
+    title = name.replace("_", " ").title()
+    return ModuleResult(
+        name,
+        title,
+        ["requires --token, GITHUB_TOKEN, or profile.token_command"],
+        {"requires_token": True},
+        requires_token=True,
+    )
+
+
 def handle_render_command(args: argparse.Namespace) -> int:
+    if args.watch and args.save:
+        raise ConfigError("--watch cannot be combined with --save")
     path = Path(args.config_path) if args.config_path else config_path()
     config = load_config(path)
+    apply_named_profile(config, args.profile)
     for item in args.set:
         if "=" not in item:
             raise ConfigError(f"invalid override '{item}', expected KEY=VALUE")
@@ -174,6 +368,7 @@ def handle_render_command(args: argparse.Namespace) -> int:
         config["display"]["avatar_style"] = args.avatar_style
     if args.avatar_color:
         config["display"]["avatar_color"] = args.avatar_color
+    load_plugin_modules(config)
 
     username = config["profile"].get("username", "").strip()
     if not username:
@@ -197,14 +392,24 @@ def handle_render_command(args: argparse.Namespace) -> int:
             repo_filters=config["repo_filters"],
         )
         module_results = []
+        metadata = available_module_metadata()
         for name in build_module_list(config):
+            if metadata.get(name, {}).get("token_required") and not token:
+                module_results.append(_token_required_result(name))
+                continue
             result = MODULE_HANDLERS[name](config, context, client)
             hide_if_empty = config["modules"].get(name, {}).get("hide_if_empty", True)
             if hide_if_empty and not result.lines:
                 result.hidden = True
             module_results.append(result)
         output_format = args.format or config["display"].get("format", "ansi")
-        print(render_output(config, context.user, module_results, output_format))
+        if output_format == "png":
+            from gitfetch.formats import render_card_png
+
+            render_card_png(config, context.user, [m for m in module_results if not m.hidden], _png_output_path(args))
+            print(f"wrote {args.save}")
+            return
+        _write_or_print(render_output(config, context.user, module_results, output_format), args)
 
     if args.watch:
         if args.watch < 1:

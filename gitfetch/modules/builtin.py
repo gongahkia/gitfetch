@@ -27,7 +27,11 @@ class ModuleResult:
 def build_module_list(config: dict[str, Any]) -> list[str]:
     modules = config["modules"]
     order = modules["order"]
-    return [name for name in order if modules.get(name, {}).get("enabled")]
+    selected = [name for name in order if modules.get(name, {}).get("enabled")]
+    for name in config.get("plugins", {}).get("modules", []) or []:
+        if name not in selected and modules.get(name, {"enabled": True}).get("enabled", True):
+            selected.append(name)
+    return selected
 
 
 def module_identity(config: dict[str, Any], context: GitHubContext, client: GitHubClient) -> ModuleResult:
@@ -693,4 +697,15 @@ MODULE_HANDLERS: dict[str, Callable[[dict[str, Any], GitHubContext, GitHubClient
     "sponsors": module_sponsors,
     "profile_readme": module_profile_readme,
     "top_repos": module_top_repos,
+    "releases": module_releases,
+    "discussions": module_discussions,
+    "actions_status": module_actions_status,
+    "repo_health": module_repo_health,
+    "topics": module_topics,
+    "dependencies": module_dependencies,
+    "security_advisories": module_security_advisories,
+    "packages": module_packages,
+    "contribution_breakdown": module_contribution_breakdown,
+    "commit_cadence": module_commit_cadence,
+    "maintainer_activity": module_maintainer_activity,
 }
