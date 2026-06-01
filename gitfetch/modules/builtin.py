@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import time
+from collections import Counter
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Callable
 
 from gitfetch.github_api import GitHubClient, GitHubContext, format_relative_days
@@ -78,12 +80,19 @@ def module_stats(config: dict[str, Any], context: GitHubContext, client: GitHubC
 
 def module_languages(config: dict[str, Any], context: GitHubContext, client: GitHubClient) -> ModuleResult:
     limit = config["modules"]["languages"].get("limit", 5)
+    workers = max(1, int(config["modules"]["languages"].get("workers", 8)))
     totals: dict[str, int] = {}
-    for repo in context.repos:
-        url = repo.get("languages_url")
-        if not url:
-            continue
-        for language, bytes_count in client.get_languages(url).items():
+    urls = [repo.get("languages_url") for repo in context.repos if repo.get("languages_url")]
+    if workers == 1 or len(urls) <= 1:
+        language_payloads = [client.get_languages(url) for url in urls]
+    else:
+        language_payloads = []
+        with ThreadPoolExecutor(max_workers=min(workers, len(urls))) as executor:
+            futures = [executor.submit(client.get_languages, url) for url in urls]
+            for future in as_completed(futures):
+                language_payloads.append(future.result())
+    for payload in language_payloads:
+        for language, bytes_count in payload.items():
             totals[language] = totals.get(language, 0) + int(bytes_count)
     total_bytes = sum(totals.values())
     if not total_bytes:
@@ -249,6 +258,298 @@ def module_top_repos(config: dict[str, Any], context: GitHubContext, client: Git
     )[:limit]
     lines, data = _repo_lines(repos, limit)
     return ModuleResult("top_repos", "Top Repos", lines, data, hidden=not bool(lines))
+
+
+def _split_full_name(repo: dict[str, Any]) -> tuple[str, str] | None:
+    full_name = repo.get("full_name")
+    if isinstance(full_name, str) and "/" in full_name:
+        owner, name = full_name.split("/", 1)
+        return owner, name
+    owner = (repo.get("owner") or {}).get("login")
+    name = repo.get("name")
+    if owner and name:
+        return owner, name
+    return None
+
+
+def _recent_repos(context: GitHubContext, limit: int) -> list[dict[str, Any]]:
+    return sorted(
+        context.repos,
+        key=lambda repo: repo.get("pushed_at") or repo.get("updated_at") or "",
+        reverse=True,
+    )[:limit]
+
+
+def _parse_github_timestamp(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def module_releases(config: dict[str, Any], context: GitHubContext, client: GitHubClient) -> ModuleResult:
+    settings = config["modules"]["releases"]
+    limit = int(settings.get("limit", 5))
+    repos_limit = int(settings.get("repos_limit", 8))
+    lines: list[str] = []
+    data: list[dict[str, Any]] = []
+    for repo in _recent_repos(context, repos_limit):
+        parsed = _split_full_name(repo)
+        if not parsed:
+            continue
+        owner, name = parsed
+        for release in client.get_repo_releases(owner, name, limit=1):
+            tag = release.get("tag_name") or release.get("name") or "release"
+            when = format_relative_days(release.get("published_at") or release.get("created_at"))
+            lines.append(f"{repo.get('name')}: {tag}" + (f" ({when})" if when else ""))
+            data.append({"repository": repo.get("full_name"), "release": release})
+            if len(lines) >= limit:
+                return ModuleResult("releases", "Releases", lines, data)
+    return ModuleResult("releases", "Releases", lines, data, hidden=not bool(lines))
+
+
+def module_discussions(config: dict[str, Any], context: GitHubContext, client: GitHubClient) -> ModuleResult:
+    settings = config["modules"]["discussions"]
+    limit = int(settings.get("limit", 5))
+    repos_limit = int(settings.get("repos_limit", 8))
+    rows: list[tuple[str, int]] = []
+    for repo in _recent_repos(context, repos_limit):
+        parsed = _split_full_name(repo)
+        if not parsed:
+            continue
+        count = client.get_repo_discussions_count(*parsed)
+        if count:
+            rows.append((repo.get("name") or repo.get("full_name") or "repo", count))
+    rows.sort(key=lambda item: item[1], reverse=True)
+    lines = [f"{name}: {count}" for name, count in rows[:limit]]
+    data = [{"repository": name, "discussions": count} for name, count in rows[:limit]]
+    return ModuleResult("discussions", "Discussions", lines, data, hidden=not bool(lines), requires_token=True)
+
+
+def module_actions_status(config: dict[str, Any], context: GitHubContext, client: GitHubClient) -> ModuleResult:
+    settings = config["modules"]["actions_status"]
+    limit = int(settings.get("limit", 5))
+    repos_limit = int(settings.get("repos_limit", 8))
+    lines: list[str] = []
+    data: list[dict[str, Any]] = []
+    for repo in _recent_repos(context, repos_limit):
+        parsed = _split_full_name(repo)
+        if not parsed:
+            continue
+        runs = client.get_repo_workflow_runs(*parsed, limit=1)
+        if not runs:
+            continue
+        run = runs[0]
+        status = run.get("conclusion") or run.get("status") or "unknown"
+        workflow = run.get("name") or run.get("display_title") or "workflow"
+        lines.append(f"{repo.get('name')}: {workflow} {status}")
+        data.append({"repository": repo.get("full_name"), "run": run})
+        if len(lines) >= limit:
+            break
+    return ModuleResult("actions_status", "Actions", lines, data, hidden=not bool(lines))
+
+
+def module_repo_health(config: dict[str, Any], context: GitHubContext, client: GitHubClient) -> ModuleResult:
+    repos = context.repos
+    total = len(repos)
+    if not total:
+        return ModuleResult("repo_health", "Repo Health", [], {}, hidden=True)
+    licensed = sum(1 for repo in repos if repo.get("license"))
+    issues_enabled = sum(1 for repo in repos if repo.get("has_issues"))
+    archived = sum(1 for repo in repos if repo.get("archived"))
+    templates = sum(1 for repo in repos if repo.get("is_template"))
+    now = datetime.now(timezone.utc)
+    active_90 = 0
+    for repo in repos:
+        pushed_at = _parse_github_timestamp(repo.get("pushed_at") or repo.get("updated_at"))
+        if pushed_at and (now - pushed_at).days <= 90:
+            active_90 += 1
+    lines = [
+        f"active in 90d: {active_90}/{total}",
+        f"licensed: {licensed}/{total}",
+        f"issues enabled: {issues_enabled}/{total}",
+        f"archived: {archived}",
+    ]
+    if templates:
+        lines.append(f"templates: {templates}")
+    data = {
+        "total": total,
+        "active_90_days": active_90,
+        "licensed": licensed,
+        "issues_enabled": issues_enabled,
+        "archived": archived,
+        "templates": templates,
+    }
+    return ModuleResult("repo_health", "Repo Health", lines, data)
+
+
+def module_topics(config: dict[str, Any], context: GitHubContext, client: GitHubClient) -> ModuleResult:
+    limit = int(config["modules"]["topics"].get("limit", 8))
+    counter: Counter[str] = Counter()
+    for repo in context.repos:
+        for topic in repo.get("topics") or []:
+            counter[str(topic)] += 1
+    lines = [f"{topic}: {count}" for topic, count in counter.most_common(limit)]
+    data = [{"topic": topic, "count": count} for topic, count in counter.most_common(limit)]
+    return ModuleResult("topics", "Topics", lines, data, hidden=not bool(lines))
+
+
+def module_dependencies(config: dict[str, Any], context: GitHubContext, client: GitHubClient) -> ModuleResult:
+    settings = config["modules"]["dependencies"]
+    limit = int(settings.get("limit", 6))
+    repos_limit = int(settings.get("repos_limit", 5))
+    package_counter: Counter[str] = Counter()
+    repos_scanned = 0
+    for repo in _recent_repos(context, repos_limit):
+        parsed = _split_full_name(repo)
+        if not parsed:
+            continue
+        sbom = client.get_repo_sbom(*parsed)
+        packages = (sbom.get("sbom") or {}).get("packages") or []
+        if packages:
+            repos_scanned += 1
+        for package in packages:
+            name = package.get("name") or package.get("SPDXID") or "unknown"
+            if name != "unknown":
+                package_counter[str(name)] += 1
+    lines = [f"{name}: {count}" for name, count in package_counter.most_common(limit)]
+    if repos_scanned:
+        lines.append(f"repos scanned: {repos_scanned}")
+    data = {
+        "repos_scanned": repos_scanned,
+        "packages": [{"name": name, "count": count} for name, count in package_counter.most_common(limit)],
+    }
+    return ModuleResult("dependencies", "Dependencies", lines, data, hidden=not bool(package_counter))
+
+
+def module_security_advisories(config: dict[str, Any], context: GitHubContext, client: GitHubClient) -> ModuleResult:
+    settings = config["modules"]["security_advisories"]
+    limit = int(settings.get("limit", 5))
+    repos_limit = int(settings.get("repos_limit", 8))
+    advisories: list[dict[str, Any]] = []
+    for repo in _recent_repos(context, repos_limit):
+        parsed = _split_full_name(repo)
+        if not parsed:
+            continue
+        for advisory in client.get_repo_security_advisories(*parsed, limit=limit):
+            advisories.append({"repository": repo.get("full_name"), "advisory": advisory})
+            if len(advisories) >= limit:
+                break
+        if len(advisories) >= limit:
+            break
+    severity_counts: Counter[str] = Counter()
+    lines: list[str] = []
+    for item in advisories:
+        advisory = item["advisory"]
+        severity = advisory.get("severity") or advisory.get("cvss", {}).get("severity") or "unknown"
+        severity_counts[str(severity)] += 1
+        summary = advisory.get("summary") or advisory.get("ghsa_id") or "advisory"
+        lines.append(f"{item['repository']}: {severity} {summary[:60]}")
+    if severity_counts:
+        lines.insert(0, "severity: " + ", ".join(f"{k} {v}" for k, v in severity_counts.items()))
+    return ModuleResult("security_advisories", "Security Advisories", lines, advisories, hidden=not bool(lines), requires_token=True)
+
+
+def module_packages(config: dict[str, Any], context: GitHubContext, client: GitHubClient) -> ModuleResult:
+    settings = config["modules"]["packages"]
+    limit = int(settings.get("limit", 5))
+    package_types = settings.get("types") or ["container", "npm", "maven", "rubygems", "nuget"]
+    lines: list[str] = []
+    data: list[dict[str, Any]] = []
+    for package_type in package_types:
+        packages = client.get_user_packages(context.target_user, str(package_type), limit=limit)
+        for package in packages:
+            name = package.get("name") or package.get("html_url") or "package"
+            lines.append(f"{package_type}: {name}")
+            data.append({"type": package_type, "package": package})
+            if len(lines) >= limit:
+                return ModuleResult("packages", "Packages", lines, data)
+    return ModuleResult("packages", "Packages", lines, data, hidden=not bool(lines))
+
+
+def module_contribution_breakdown(config: dict[str, Any], context: GitHubContext, client: GitHubClient) -> ModuleResult:
+    contrib = context.graphql.get("contributionsCollection", {})
+    if not contrib:
+        return ModuleResult("contribution_breakdown", "Contribution Breakdown", [], {}, hidden=True, requires_token=True)
+    lines = [
+        f"commits: {contrib.get('totalCommitContributions', 0)}",
+        f"issues: {contrib.get('totalIssueContributions', 0)}",
+        f"pull requests: {contrib.get('totalPullRequestContributions', 0)}",
+        f"reviews: {contrib.get('totalPullRequestReviewContributions', 0)}",
+    ]
+    calendar = contrib.get("contributionCalendar") or {}
+    if calendar.get("totalContributions") is not None:
+        lines.append(f"calendar total: {calendar.get('totalContributions', 0)}")
+    data = {
+        "commits": contrib.get("totalCommitContributions", 0),
+        "issues": contrib.get("totalIssueContributions", 0),
+        "pull_requests": contrib.get("totalPullRequestContributions", 0),
+        "reviews": contrib.get("totalPullRequestReviewContributions", 0),
+        "calendar_total": calendar.get("totalContributions", 0),
+    }
+    return ModuleResult("contribution_breakdown", "Contribution Breakdown", lines, data, requires_token=True)
+
+
+def module_commit_cadence(config: dict[str, Any], context: GitHubContext, client: GitHubClient) -> ModuleResult:
+    window = int(config["modules"]["commit_cadence"].get("days", 30))
+    days = _flatten_contribution_days(context.graphql)
+    if days:
+        recent = sorted(days, key=lambda d: d.get("date", ""))[-window:]
+        active_days = sum(1 for day in recent if day.get("contributionCount", 0) > 0)
+        total = sum(day.get("contributionCount", 0) for day in recent)
+        peak = max((day.get("contributionCount", 0) for day in recent), default=0)
+        lines = [
+            f"last {len(recent)} days: {total} contributions",
+            f"active days: {active_days}",
+            f"peak day: {peak}",
+        ]
+        return ModuleResult("commit_cadence", "Commit Cadence", lines, {"days": recent, "total": total, "active_days": active_days})
+
+    push_events = [event for event in context.events if event.get("type") == "PushEvent"]
+    commit_count = sum(len((event.get("payload") or {}).get("commits") or []) for event in push_events)
+    lines = [
+        f"push events shown: {len(push_events)}",
+        f"commits in public events: {commit_count}",
+    ]
+    data = {"push_events": len(push_events), "commits": commit_count}
+    return ModuleResult("commit_cadence", "Commit Cadence", lines, data, hidden=not bool(push_events))
+
+
+def module_maintainer_activity(config: dict[str, Any], context: GitHubContext, client: GitHubClient) -> ModuleResult:
+    repos = context.repos
+    if not repos:
+        return ModuleResult("maintainer_activity", "Maintainer Activity", [], {}, hidden=True)
+    now = datetime.now(timezone.utc)
+    recent_pushes = 0
+    stale = 0
+    open_issues = 0
+    stars = 0
+    forks = 0
+    for repo in repos:
+        pushed = _parse_github_timestamp(repo.get("pushed_at") or repo.get("updated_at"))
+        if pushed and (now - pushed).days <= 30:
+            recent_pushes += 1
+        if pushed and (now - pushed).days > 365:
+            stale += 1
+        open_issues += int(repo.get("open_issues_count", 0) or 0)
+        stars += int(repo.get("stargazers_count", 0) or 0)
+        forks += int(repo.get("forks_count", 0) or 0)
+    lines = [
+        f"pushed in 30d: {recent_pushes}/{len(repos)}",
+        f"stale >365d: {stale}",
+        f"open issues: {open_issues}",
+        f"stars/forks: {stars}/{forks}",
+    ]
+    data = {
+        "recent_pushes_30_days": recent_pushes,
+        "stale_repos_over_365_days": stale,
+        "open_issues": open_issues,
+        "stars": stars,
+        "forks": forks,
+    }
+    return ModuleResult("maintainer_activity", "Maintainer Activity", lines, data)
 
 
 def _flatten_contribution_days(graphql: dict[str, Any]) -> list[dict[str, Any]]:

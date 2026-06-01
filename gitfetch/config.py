@@ -34,6 +34,17 @@ OPTIONAL_MODULES = [
     "sponsors",
     "profile_readme",
     "top_repos",
+    "releases",
+    "discussions",
+    "actions_status",
+    "repo_health",
+    "topics",
+    "dependencies",
+    "security_advisories",
+    "packages",
+    "contribution_breakdown",
+    "commit_cadence",
+    "maintainer_activity",
 ]
 
 DEFAULT_CONFIG: dict[str, Any] = {
@@ -41,6 +52,12 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "username": "",
         "mode": "public",
         "token_env": "GITHUB_TOKEN",
+        "token_command": "",
+    },
+    "profiles": {},
+    "plugins": {
+        "paths": [],
+        "modules": [],
     },
     "cache": {
         "enabled": True,
@@ -56,6 +73,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "layout": "split",
         "show_empty": False,
         "margin": 0,
+        "format": "ansi",
         "avatar_style": "ascii",
         "avatar_color": "auto",
     },
@@ -78,6 +96,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
             "enabled": True,
             "hide_if_empty": True,
             "limit": 5,
+            "workers": 8,
         },
         "contributions": {
             "enabled": True,
@@ -158,6 +177,64 @@ DEFAULT_CONFIG: dict[str, Any] = {
             "hide_if_empty": True,
             "limit": 5,
         },
+        "releases": {
+            "enabled": False,
+            "hide_if_empty": True,
+            "limit": 5,
+            "repos_limit": 8,
+        },
+        "discussions": {
+            "enabled": False,
+            "hide_if_empty": True,
+            "limit": 5,
+            "repos_limit": 8,
+        },
+        "actions_status": {
+            "enabled": False,
+            "hide_if_empty": True,
+            "limit": 5,
+            "repos_limit": 8,
+        },
+        "repo_health": {
+            "enabled": False,
+            "hide_if_empty": True,
+        },
+        "topics": {
+            "enabled": False,
+            "hide_if_empty": True,
+            "limit": 8,
+        },
+        "dependencies": {
+            "enabled": False,
+            "hide_if_empty": True,
+            "limit": 6,
+            "repos_limit": 5,
+        },
+        "security_advisories": {
+            "enabled": False,
+            "hide_if_empty": True,
+            "limit": 5,
+            "repos_limit": 8,
+        },
+        "packages": {
+            "enabled": False,
+            "hide_if_empty": True,
+            "limit": 5,
+            "types": ["container", "npm", "maven", "rubygems", "nuget"],
+        },
+        "contribution_breakdown": {
+            "enabled": False,
+            "hide_if_empty": True,
+        },
+        "commit_cadence": {
+            "enabled": False,
+            "hide_if_empty": True,
+            "days": 30,
+        },
+        "maintainer_activity": {
+            "enabled": False,
+            "hide_if_empty": True,
+        },
     },
 }
 
@@ -237,6 +314,17 @@ MODULE_METADATA: dict[str, dict[str, Any]] = {
     "sponsors": {"token_required": True, "description": "Sponsor listing availability via GraphQL."},
     "profile_readme": {"token_required": False, "description": "Summary from the profile README repository."},
     "top_repos": {"token_required": False, "description": "Top repositories by stars."},
+    "releases": {"token_required": False, "description": "Recent releases from owned repositories."},
+    "discussions": {"token_required": True, "description": "Discussion counts across recent repositories."},
+    "actions_status": {"token_required": False, "description": "Latest GitHub Actions run status by repository."},
+    "repo_health": {"token_required": False, "description": "Repository hygiene and maintenance signals."},
+    "topics": {"token_required": False, "description": "Top repository topics across the profile."},
+    "dependencies": {"token_required": False, "description": "Dependency SBOM package summary for recent repositories."},
+    "security_advisories": {"token_required": True, "description": "Repository security advisory summary."},
+    "packages": {"token_required": False, "description": "Public GitHub Packages summary."},
+    "contribution_breakdown": {"token_required": True, "description": "Commit, issue, PR, and review contribution totals."},
+    "commit_cadence": {"token_required": False, "description": "Recent commit cadence from contribution data or public events."},
+    "maintainer_activity": {"token_required": False, "description": "Recent repository maintenance activity."},
 }
 
 
@@ -348,7 +436,37 @@ def get_token(cli_token: str | None, config: dict[str, Any]) -> str:
     if cli_token:
         return cli_token
     env_name = config.get("profile", {}).get("token_env", "GITHUB_TOKEN")
-    return os.environ.get(env_name, "")
+    env_token = os.environ.get(env_name, "")
+    if env_token:
+        return env_token
+    token_command = config.get("profile", {}).get("token_command", "")
+    if token_command:
+        import shlex
+        import subprocess
+
+        try:
+            result = subprocess.run(
+                shlex.split(token_command),
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+        except (OSError, ValueError, subprocess.SubprocessError):
+            return ""
+        if result.returncode == 0:
+            return result.stdout.strip()
+    return ""
+
+
+def apply_named_profile(config: dict[str, Any], name: str | None) -> None:
+    if not name:
+        return
+    profiles = config.get("profiles", {})
+    profile = profiles.get(name)
+    if not isinstance(profile, dict):
+        raise ConfigError(f"unknown profile '{name}'")
+    _merge(config["profile"], copy.deepcopy(profile))
 
 
 def set_override(config: dict[str, Any], dotted_key: str, raw_value: str) -> None:
