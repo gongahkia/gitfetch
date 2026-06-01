@@ -97,6 +97,20 @@ class GitHubClient:
             self.cache.set(cache_key, payload)
         return payload
 
+    def _get_json_optional(
+        self,
+        path: str,
+        params: dict[str, Any] | None = None,
+        cache_key: str | None = None,
+        default: Any = None,
+    ) -> Any:
+        try:
+            return self._get_json(path, params=params, cache_key=cache_key)
+        except GitHubAPIError:
+            return default
+        except requests.RequestException:
+            return default
+
     def _paginate(self, path: str, params: dict[str, Any] | None = None, cache_key: str | None = None) -> list[dict[str, Any]]:
         if cache_key:
             cached = self.cache.get(cache_key)
@@ -196,6 +210,89 @@ class GitHubClient:
             params={"per_page": limit},
             cache_key=self._cache_key("events", username, str(limit)),
         )[:limit]
+
+    def get_repo_releases(self, owner: str, name: str, limit: int = 3) -> list[dict[str, Any]]:
+        payload = self._get_json_optional(
+            f"/repos/{owner}/{name}/releases",
+            params={"per_page": limit},
+            cache_key=self._cache_key("repo_releases", owner, name, str(limit)),
+            default=[],
+        )
+        return payload[:limit] if isinstance(payload, list) else []
+
+    def get_repo_workflow_runs(self, owner: str, name: str, limit: int = 1) -> list[dict[str, Any]]:
+        payload = self._get_json_optional(
+            f"/repos/{owner}/{name}/actions/runs",
+            params={"per_page": limit},
+            cache_key=self._cache_key("repo_workflow_runs", owner, name, str(limit)),
+            default={},
+        )
+        runs = payload.get("workflow_runs", []) if isinstance(payload, dict) else []
+        return runs[:limit]
+
+    def get_repo_discussions_count(self, owner: str, name: str) -> int | None:
+        if not self.token or self.offline:
+            return None
+        cache_key = self._cache_key("repo_discussions", owner, name)
+        cached = self.cache.get(cache_key)
+        if cached is not None:
+            return cached
+        query = """
+        query GitFetchRepoDiscussions($owner: String!, $name: String!) {
+          repository(owner: $owner, name: $name) {
+            discussions(first: 0) { totalCount }
+          }
+        }
+        """
+        try:
+            response = self.session.post(
+                "https://api.github.com/graphql",
+                json={"query": query, "variables": {"owner": owner, "name": name}},
+                timeout=20,
+            )
+        except requests.RequestException:
+            return None
+        if not response.ok:
+            return None
+        payload = response.json()
+        if payload.get("errors"):
+            return None
+        count = (
+            payload.get("data", {})
+            .get("repository", {})
+            .get("discussions", {})
+            .get("totalCount")
+        )
+        if isinstance(count, int):
+            self.cache.set(cache_key, count)
+            return count
+        return None
+
+    def get_repo_sbom(self, owner: str, name: str) -> dict[str, Any]:
+        payload = self._get_json_optional(
+            f"/repos/{owner}/{name}/dependency-graph/sbom",
+            cache_key=self._cache_key("repo_sbom", owner, name),
+            default={},
+        )
+        return payload if isinstance(payload, dict) else {}
+
+    def get_repo_security_advisories(self, owner: str, name: str, limit: int = 5) -> list[dict[str, Any]]:
+        payload = self._get_json_optional(
+            f"/repos/{owner}/{name}/security-advisories",
+            params={"per_page": limit},
+            cache_key=self._cache_key("repo_security_advisories", owner, name, str(limit)),
+            default=[],
+        )
+        return payload[:limit] if isinstance(payload, list) else []
+
+    def get_user_packages(self, username: str, package_type: str, limit: int = 5) -> list[dict[str, Any]]:
+        payload = self._get_json_optional(
+            f"/users/{username}/packages",
+            params={"package_type": package_type, "per_page": limit},
+            cache_key=self._cache_key("packages", username, package_type, str(limit)),
+            default=[],
+        )
+        return payload[:limit] if isinstance(payload, list) else []
 
     def get_repo(self, owner: str, name: str) -> dict[str, Any]:
         return self._get_json(
