@@ -17,6 +17,25 @@ Serving you snapshots of your [GitHub](https://github.com/) profile in the [CLI]
     <img src="assets/gitfetch.png" width="90%">
 </div>
 
+## Features
+
+- ASCII art avatar rendered from your GitHub profile picture
+- Profile stats: hours since joining, public repos, followers, days since last commit
+- Top-5 language breakdown by repository bytes
+- Contribution heatmap (last 12 weeks, requires `--token`)
+- Config presets: `minimal`, `compact`, `full`, and `showcase`
+- Named profiles for switching between saved GitHub users or token sources
+- Public and authenticated viewer modes
+- Terminal themes, margins, color controls, and split or stacked layouts
+- Avatar styles: `ascii`, `halfblock`, and `braille`
+- Output formats: `ansi`, `plain`, `json`, `svg`, `card`, and `png`
+- Repository mode with repository stats, language breakdown, contributors, and recent commits
+- Organization mode with organization stats, top repositories, and public members
+- Compare mode with side-by-side profiles, rankings, language overlap, and metric summaries
+- Cache, refresh, watch, and offline modes
+- Bash, Zsh, and Fish shell completions
+- Local plugin modules loaded from Python files
+
 ## Usage
 
 > [!NOTE]  
@@ -79,25 +98,6 @@ $ gitfetch token store --service gitfetch --account work
 $ gitfetch token status --service gitfetch --account work
 $ gitfetch --set profile.token_command="security find-generic-password -a work -s gitfetch -w" --profile work
 ```
-
-## Features
-
-- ASCII art avatar rendered from your GitHub profile picture
-- Profile stats: hours since joining, public repos, followers, days since last commit
-- Top-5 language breakdown by repository bytes
-- Contribution heatmap (last 12 weeks, requires `--token`)
-- Config presets: `minimal`, `compact`, `full`, and `showcase`
-- Named profiles for switching between saved GitHub users or token sources
-- Public and authenticated viewer modes
-- Terminal themes, margins, color controls, and split or stacked layouts
-- Avatar styles: `ascii`, `halfblock`, and `braille`
-- Output formats: `ansi`, `plain`, `json`, `svg`, `card`, and `png`
-- Repository mode with repository stats, language breakdown, contributors, and recent commits
-- Organization mode with organization stats, top repositories, and public members
-- Compare mode with side-by-side profiles, rankings, language overlap, and metric summaries
-- Cache, refresh, watch, and offline modes
-- Bash, Zsh, and Fish shell completions
-- Local plugin modules loaded from Python files
 
 ## Modules
 
