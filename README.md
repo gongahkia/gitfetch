@@ -13,11 +13,13 @@ Serving you snapshots of your [GitHub](https://github.com/) profile in the [CLI]
 
 ## Screenshots
 
-<img src="assets/gitfetch.png" width="60%">
+<div align="center">
+    <img src="assets/gitfetch.png" width="90%">
+</div>
 
 ## Usage
 
-> [!NOTE]
+> [!NOTE]  
 > Note that `Gitfetch` minimally requires Python3.10+ to be installed, which can be downloaded [here](https://www.python.org/downloads/).  
 > **Also** note that `Gitfetch` is optimized for terminals with font size 10.
 
@@ -95,7 +97,6 @@ $ gitfetch --set profile.token_command="security find-generic-password -a work -
 - Compare mode with side-by-side profiles, rankings, language overlap, and metric summaries
 - Cache, refresh, watch, and offline modes
 - Bash, Zsh, and Fish shell completions
-- macOS Keychain token helpers
 - Local plugin modules loaded from Python files
 
 ## Modules
