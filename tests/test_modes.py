@@ -52,6 +52,37 @@ class ModesTests(unittest.TestCase):
             self.assertIn("alice", out)
             self.assertIn("first commit", out)
 
+    def test_repo_subcommand_json_format(self, mock_client_cls: mock.Mock) -> None:
+        instance = mock_client_cls.return_value
+        instance.get_repo.return_value = {
+            "full_name": "octocat/Hello-World",
+            "description": "First repo",
+            "default_branch": "master",
+            "stargazers_count": 100,
+            "forks_count": 50,
+            "watchers_count": 25,
+            "open_issues_count": 3,
+            "size": 12,
+            "owner": {"avatar_url": None},
+        }
+        instance.get_repo_languages.return_value = {"Python": 1000}
+        instance.get_repo_contributors.return_value = []
+        instance.get_repo_commits.return_value = []
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cfg = Path(tmpdir) / "config.toml"
+            _write_minimal_config(cfg)
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                rc = main([
+                    "--config", str(cfg), "--no-avatar", "--format", "json",
+                    "repo", "octocat/Hello-World",
+                ])
+            self.assertEqual(rc, 0)
+            out = stdout.getvalue()
+            self.assertIn('"type": "repository"', out)
+            self.assertIn('"languages"', out)
+
     def test_org_subcommand_renders(self, mock_client_cls: mock.Mock) -> None:
         instance = mock_client_cls.return_value
         instance.get_org.return_value = {

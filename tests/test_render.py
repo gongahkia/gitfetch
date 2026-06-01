@@ -1,6 +1,9 @@
 import unittest
+import tempfile
+from pathlib import Path
 
 from gitfetch.modules.builtin import ModuleResult
+from gitfetch.formats import render_card_png
 from gitfetch.render import render_output
 
 
@@ -67,3 +70,13 @@ class RenderTests(unittest.TestCase):
         self.assertTrue(rendered.startswith("<svg"))
         self.assertIn("@octocat", rendered)
         self.assertIn("Python", rendered)
+
+    def test_render_card_png_writes_file(self) -> None:
+        config = self._visual_config()
+        modules = [ModuleResult(name="languages", title="Languages", lines=["Python 90%"], data=[])]
+        user = {"login": "octocat", "name": "Octo", "public_repos": 5, "followers": 10, "following": 0}
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "card.png"
+            render_card_png(config, user, modules, path)
+            self.assertTrue(path.exists())
+            self.assertGreater(path.stat().st_size, 0)

@@ -1,43 +1,54 @@
+from __future__ import annotations
+
 import os
 import platform
-import os.path
-import shutil
-import time
+import site
+import subprocess
+import sys
+from pathlib import Path
 
-# --- colored text in terminal, argument taken in with single quote strings '' ✔️
-def prRed(word):
-    return "\033[91m{}\033[00m" .format(word)
-def prGreen(word):
-    return "\033[92m{}\033[00m" .format(word)
-def prPurple(word):
-    return "\033[95m{}\033[00m" .format(word)
 
-# --- determine current platform ✔️
-match platform.system(): 
-    case "Linux":
-        print(f"{prPurple('Hooray')}, installing now on {prGreen('Linux')}!")
-    case "Darwin":
-        print(f"{prPurple('Hooray')}, installing now on {prGreen('MacOS')}!")
-    case "Windows":
-        print(f"Sorry. Gitfetch is {prRed('not able to support windows')} currently!")
-    case _:
-        print(f"My brother in Christ, {prRed('what OS are you even using')}?")
+def _rc_file() -> Path:
+    shell = Path(os.environ.get("SHELL", "")).name
+    if shell == "zsh":
+        return Path.home() / ".zshrc"
+    if shell == "fish":
+        return Path.home() / ".config" / "fish" / "config.fish"
+    return Path.home() / ".bashrc"
 
-# --- copies the desired executable to the ~/.config file path ✔️
-destinationFilePath = f"/home/{os.getcwd().split('/')[2]}/.config/gitfetch-build"
-shutil.copytree("../gitfetch-build", destinationFilePath)
 
-# --- pseudo loading screen ✔️
-counter = 0
-filledProgressBar = ""
-unfilledProgressBar = "---------------------------------------------------"
-os.system("clear")
-while counter < 102:
-    filledProgressBar += "X"
-    unfilledProgressBar = unfilledProgressBar.replace('-', '', 1)
-    print(f"{prPurple('Gitfetch installer')}\nCloning files... [{prGreen(filledProgressBar)}{unfilledProgressBar}] {counter}%")
-    time.sleep(0.25)
-    os.system("clear")
-    counter += 2
-os.system("clear")
-print(f"Files have been {prGreen('succesfully cloned')}!\nPlease follow the following steps to complete installation:\n(1) Close this terminal session and open a new one.\n(2) Run the command 'gitfetch' to get started.\n*These instructions are up on the github README.md as well!")
+def _ensure_user_bin_on_path() -> None:
+    user_bin = Path(site.getuserbase()) / "bin"
+    if str(user_bin) in os.environ.get("PATH", ""):
+        return
+    rc_file = _rc_file()
+    rc_file.parent.mkdir(parents=True, exist_ok=True)
+    current = rc_file.read_text(encoding="utf-8") if rc_file.exists() else ""
+    if str(user_bin) in current:
+        return
+    if rc_file.name == "config.fish":
+        line = f"set -gx PATH {user_bin} $PATH\n"
+    else:
+        line = f'export PATH="{user_bin}:$PATH"\n'
+    with rc_file.open("a", encoding="utf-8") as fh:
+        fh.write(line)
+    print(f"Added {user_bin} to {rc_file}")
+
+
+def main() -> int:
+    system = platform.system()
+    if system not in {"Darwin", "Linux"}:
+        print(f"Unsupported platform: {system}", file=sys.stderr)
+        return 1
+    pip_args = [sys.executable, "-m", "pip", "install"]
+    if not os.environ.get("VIRTUAL_ENV"):
+        pip_args.append("--user")
+    pip_args.append("git+https://github.com/gongahkia/gitfetch.git")
+    subprocess.run(pip_args, check=True)
+    _ensure_user_bin_on_path()
+    print("gitfetch installed. Restart your shell, then run: gitfetch")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

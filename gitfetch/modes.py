@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import argparse
+import json
 import shutil
+from pathlib import Path
 from typing import Any
 
 from gitfetch.cache import CacheStore
 from gitfetch.config import (
+    apply_named_profile,
     cache_dir,
     config_path,
     get_token,
@@ -14,7 +17,8 @@ from gitfetch.config import (
     ConfigError,
 )
 from gitfetch.github_api import GitHubAPIError, GitHubClient
-from gitfetch.modules.builtin import MODULE_HANDLERS, ModuleResult, build_module_list
+from gitfetch.modules import MODULE_HANDLERS, available_module_metadata, build_module_list, load_plugin_modules
+from gitfetch.modules.builtin import ModuleResult
 from gitfetch.render import (
     SPLIT_GAP,
     apply_margin,
@@ -57,7 +61,9 @@ def _load_config_with_path(args: argparse.Namespace) -> dict[str, Any]:
     from pathlib import Path
     path = Path(args.config_path) if getattr(args, "config_path", None) else config_path()
     config = load_config(path)
+    apply_named_profile(config, getattr(args, "profile", None))
     _apply_common_overrides(args, config)
+    load_plugin_modules(config)
     return config
 
 
@@ -120,6 +126,136 @@ def _render_with_lines(
     return apply_margin(result, margin)
 
 
+def _write_or_print(text: str, args: argparse.Namespace) -> None:
+    if getattr(args, "save", None):
+        path = Path(args.save)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+        print(f"wrote {path}")
+    else:
+        print(text)
+
+
+def _png_output_path(args: argparse.Namespace) -> Path:
+    if not getattr(args, "save", None):
+        raise ConfigError("--save is required for --format png")
+    path = Path(args.save)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _module_payload(modules: list[ModuleResult]) -> dict[str, Any]:
+    return {module.name: module.data for module in modules if not module.hidden}
+
+
+def _emit_mode_output(
+    config: dict[str, Any],
+    args: argparse.Namespace,
+    *,
+    kind: str,
+    title: str,
+    subtitle: str,
+    avatar_url: str | None,
+    modules: list[ModuleResult],
+    extra: dict[str, Any] | None = None,
+) -> None:
+    output_format = args.format or config["display"].get("format", "ansi")
+    visible_modules = [module for module in modules if not module.hidden]
+    if output_format == "json":
+        payload = {
+            "type": kind,
+            "title": title,
+            "subtitle": subtitle,
+            "modules": _module_payload(visible_modules),
+        }
+        if extra:
+            payload.update(extra)
+        _write_or_print(json.dumps(payload, indent=2), args)
+        return
+
+    if output_format in {"card", "png"}:
+        from gitfetch.formats import render_summary_card_png, render_summary_card_svg
+
+        if output_format == "png":
+            render_summary_card_png(config, title, subtitle, visible_modules, avatar_url, _png_output_path(args))
+            print(f"wrote {args.save}")
+        else:
+            _write_or_print(render_summary_card_svg(config, title, subtitle, visible_modules, avatar_url), args)
+        return
+
+    if output_format == "svg":
+        from gitfetch.formats import render_terminal_svg
+
+        svg_config = {**config, "_color_force": "on"}
+        palette = palette_for(svg_config)
+        text_lines = module_lines(visible_modules, color_enabled(svg_config, "ansi"), palette)
+        terminal_text = _render_with_lines(svg_config, "ansi", avatar_url, text_lines)
+        _write_or_print(render_terminal_svg(terminal_text, config), args)
+        return
+
+    enabled_color = color_enabled(config, output_format)
+    palette = palette_for(config)
+    text = module_lines(visible_modules, enabled_color, palette)
+    _write_or_print(_render_with_lines(config, output_format, avatar_url, text), args)
+
+
+def _token_required_result(name: str) -> ModuleResult:
+    return ModuleResult(
+        name,
+        name.replace("_", " ").title(),
+        ["requires --token, GITHUB_TOKEN, or profile.token_command"],
+        {"requires_token": True},
+        requires_token=True,
+    )
+
+
+def _compare_metrics(ctx) -> dict[str, Any]:
+    languages: dict[str, int] = {}
+    for repo in ctx.repos:
+        language = repo.get("language")
+        if language:
+            languages[language] = languages.get(language, 0) + 1
+    return {
+        "login": ctx.user.get("login"),
+        "followers": int(ctx.user.get("followers", 0) or 0),
+        "following": int(ctx.user.get("following", 0) or 0),
+        "public_repos": int(ctx.user.get("public_repos", len(ctx.repos)) or 0),
+        "stars": sum(int(repo.get("stargazers_count", 0) or 0) for repo in ctx.repos),
+        "forks": sum(int(repo.get("forks_count", 0) or 0) for repo in ctx.repos),
+        "languages": languages,
+        "top_language": max(languages.items(), key=lambda item: item[1])[0] if languages else None,
+    }
+
+
+def _rank_line(metrics: list[dict[str, Any]], key: str, label: str) -> str:
+    ranked = sorted(metrics, key=lambda item: item.get(key, 0), reverse=True)
+    values = " > ".join(f"{item['login']} {item.get(key, 0)}" for item in ranked)
+    return f"{label}: {values}"
+
+
+def _compare_summary_module(metrics: list[dict[str, Any]]) -> ModuleResult:
+    language_sets = [set(item["languages"]) for item in metrics]
+    overlap = sorted(set.intersection(*language_sets)) if language_sets and all(language_sets) else []
+    top_languages = ", ".join(f"{item['login']} {item.get('top_language') or 'n/a'}" for item in metrics)
+    lines = [
+        _rank_line(metrics, "followers", "followers"),
+        _rank_line(metrics, "public_repos", "repos"),
+        _rank_line(metrics, "stars", "stars"),
+        _rank_line(metrics, "forks", "forks"),
+        f"language overlap: {', '.join(overlap) if overlap else 'none'}",
+        f"top languages: {top_languages}",
+    ]
+    return ModuleResult(
+        "summary",
+        "Compare Summary",
+        lines,
+        {
+            "metrics": metrics,
+            "language_overlap": overlap,
+        },
+    )
+
+
 def handle_repo_command(args: argparse.Namespace) -> int:
     if "/" not in args.target:
         raise ConfigError("repo target must be OWNER/NAME")
@@ -134,10 +270,6 @@ def handle_repo_command(args: argparse.Namespace) -> int:
     except GitHubAPIError as exc:
         print(f"api error: {exc}")
         return 1
-
-    output_format = args.format or config["display"].get("format", "ansi")
-    enabled_color = color_enabled(config, output_format)
-    palette = palette_for(config)
 
     modules: list[ModuleResult] = []
     identity_lines = [f"{repo.get('full_name')}"]
@@ -185,9 +317,17 @@ def handle_repo_command(args: argparse.Namespace) -> int:
     if commit_lines:
         modules.append(ModuleResult("recent_commits", "Recent Commits", commit_lines, commits))
 
-    text = module_lines(modules, enabled_color, palette)
     avatar_url = (repo.get("owner") or {}).get("avatar_url")
-    print(_render_with_lines(config, output_format, avatar_url, text))
+    _emit_mode_output(
+        config,
+        args,
+        kind="repository",
+        title=repo.get("full_name") or args.target,
+        subtitle=repo.get("description") or "GitHub repository",
+        avatar_url=avatar_url,
+        modules=modules,
+        extra={"target": args.target},
+    )
     return 0
 
 
@@ -201,10 +341,6 @@ def handle_org_command(args: argparse.Namespace) -> int:
     except GitHubAPIError as exc:
         print(f"api error: {exc}")
         return 1
-
-    output_format = args.format or config["display"].get("format", "ansi")
-    enabled_color = color_enabled(config, output_format)
-    palette = palette_for(config)
 
     identity_lines = [f"@{org.get('login')}"]
     if org.get("name"):
@@ -239,8 +375,16 @@ def handle_org_command(args: argparse.Namespace) -> int:
     if member_lines:
         modules.append(ModuleResult("members", "Members", member_lines, members))
 
-    text = module_lines(modules, enabled_color, palette)
-    print(_render_with_lines(config, output_format, org.get("avatar_url"), text))
+    _emit_mode_output(
+        config,
+        args,
+        kind="organization",
+        title=org.get("name") or org.get("login") or args.target,
+        subtitle=f"@{org.get('login', args.target)}",
+        avatar_url=org.get("avatar_url"),
+        modules=modules,
+        extra={"target": args.target},
+    )
     return 0
 
 
@@ -255,6 +399,8 @@ def handle_compare_command(args: argparse.Namespace) -> int:
 
     columns: list[list[str]] = []
     avatars: list[list[str]] = []
+    contexts = []
+    modules_by_user: dict[str, list[ModuleResult]] = {}
     margin = max(0, int(config["display"].get("margin", 0)))
 
     user_count = len(args.users)
@@ -266,6 +412,7 @@ def handle_compare_command(args: argparse.Namespace) -> int:
         budget = term_cols - 2 * margin - gap * (user_count - 1)
         column_width = max(20, budget // user_count)
     avatar_color = effective_avatar_color(config, output_format)
+    metadata = available_module_metadata()
 
     for user_login in args.users:
         try:
@@ -277,9 +424,13 @@ def handle_compare_command(args: argparse.Namespace) -> int:
         except GitHubAPIError as exc:
             print(f"api error for {user_login}: {exc}")
             return 1
+        contexts.append(ctx)
         modules: list[ModuleResult] = []
         for name in build_module_list(config):
             try:
+                if metadata.get(name, {}).get("token_required") and not client.token:
+                    modules.append(_token_required_result(name))
+                    continue
                 result = MODULE_HANDLERS[name](config, ctx, client)
             except KeyError:
                 continue
@@ -288,6 +439,7 @@ def handle_compare_command(args: argparse.Namespace) -> int:
                 result.hidden = True
             modules.append(result)
         visible = [m for m in modules if not m.hidden]
+        modules_by_user[user_login] = visible
         text = module_lines(visible, enabled_color, palette)
         columns.append(text)
         if config["display"].get("avatar") and output_format in {"ansi", "plain"}:
@@ -302,6 +454,49 @@ def handle_compare_command(args: argparse.Namespace) -> int:
             )
         else:
             avatars.append([])
+
+    metrics = [_compare_metrics(ctx) for ctx in contexts]
+    summary = _compare_summary_module(metrics)
+    if output_format == "json":
+        payload = {
+            "type": "compare",
+            "users": args.users,
+            "summary": summary.data,
+            "modules": {
+                user: _module_payload(modules)
+                for user, modules in modules_by_user.items()
+            },
+        }
+        _write_or_print(json.dumps(payload, indent=2), args)
+        return 0
+
+    if output_format in {"card", "png"}:
+        card_modules = [summary]
+        for metric in metrics:
+            card_modules.append(
+                ModuleResult(
+                    metric["login"],
+                    str(metric["login"]),
+                    [
+                        f"followers: {metric['followers']}",
+                        f"repos: {metric['public_repos']}",
+                        f"stars: {metric['stars']}",
+                        f"top language: {metric.get('top_language') or 'n/a'}",
+                    ],
+                    metric,
+                )
+            )
+        _emit_mode_output(
+            config,
+            args,
+            kind="compare",
+            title="GitHub Compare",
+            subtitle=" vs ".join(args.users),
+            avatar_url=None,
+            modules=card_modules,
+            extra={"users": args.users},
+        )
+        return 0
 
     blocks: list[list[str]] = []
     for avatar, text in zip(avatars, columns):
@@ -321,5 +516,14 @@ def handle_compare_command(args: argparse.Namespace) -> int:
             pad = " " * max(0, column_width - visible)
             parts.append(line + pad)
         rows.append("    ".join(parts))
-    print(apply_margin("\n".join(rows), margin))
+    summary_text = module_lines([summary], enabled_color, palette)
+    final_text = "\n".join(summary_text + [""] + rows)
+    if output_format == "svg":
+        from gitfetch.formats import render_terminal_svg
+
+        svg_config = {**config, "_color_force": "on"}
+        svg_summary = module_lines([summary], color_enabled(svg_config, "ansi"), palette_for(svg_config))
+        _write_or_print(render_terminal_svg("\n".join(svg_summary + [""] + rows), config), args)
+    else:
+        _write_or_print(apply_margin(final_text, margin), args)
     return 0

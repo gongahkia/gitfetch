@@ -42,16 +42,149 @@ $ gitfetch --no-avatar # stats only, no ASCII art
 $ gitfetch --token ghp_xxxx # authenticated (5000 req/hr), also accepts a GITHUB_TOKEN env variable as fallback
 ```
 
+3. You can also render repositories, organizations, comparisons, and files directly from the CLI.
+
+```console
+$ gitfetch repo octocat/Hello-World # render a repository profile
+$ gitfetch org github # render an organization profile
+$ gitfetch compare octocat torvalds # compare two or more users side-by-side
+$ gitfetch --format json --user octocat # machine-readable output
+$ gitfetch --format svg --save profile.svg --user octocat # terminal render as SVG
+$ gitfetch --format card --save profile-card.svg --user octocat # shareable profile card
+$ gitfetch --format png --save profile-card.png --user octocat # shareable PNG card
+```
+
+4. For a guided setup, run the interactive config wizard.
+
+```console
+$ gitfetch config wizard
+$ gitfetch config validate
+$ gitfetch config path
+```
+
+5. For multiple GitHub accounts or saved targets, store named profiles in your config.
+
+```console
+$ gitfetch config profiles set work --user octocat --mode public
+$ gitfetch config profiles list
+$ gitfetch --profile work
+```
+
+6. On macOS, you can store your token in Keychain and point `Gitfetch` at it through `profile.token_command`.
+
+```console
+$ gitfetch token store --service gitfetch --account work
+$ gitfetch token status --service gitfetch --account work
+$ gitfetch --set profile.token_command="security find-generic-password -a work -s gitfetch -w" --profile work
+```
+
 ## Features
 
 - ASCII art avatar rendered from your GitHub profile picture
 - Profile stats: hours since joining, public repos, followers, days since last commit
 - Top-5 language breakdown by repository bytes
 - Contribution heatmap (last 12 weeks, requires `--token`)
+- Config presets: `minimal`, `compact`, `full`, and `showcase`
+- Named profiles for switching between saved GitHub users or token sources
+- Public and authenticated viewer modes
+- Terminal themes, margins, color controls, and split or stacked layouts
+- Avatar styles: `ascii`, `halfblock`, and `braille`
+- Output formats: `ansi`, `plain`, `json`, `svg`, `card`, and `png`
+- Repository mode with repository stats, language breakdown, contributors, and recent commits
+- Organization mode with organization stats, top repositories, and public members
+- Compare mode with side-by-side profiles, rankings, language overlap, and metric summaries
+- Cache, refresh, watch, and offline modes
+- Bash, Zsh, and Fish shell completions
+- macOS Keychain token helpers
+- Local plugin modules loaded from Python files
+
+## Modules
+
+Run the below command to inspect all supported modules and whether they require a GitHub token.
+
+```console
+$ gitfetch modules list
+```
+
+The default module set includes identity, stats, languages, and contributions. Extra modules can be enabled in `config.toml` or with `--set`.
+
+```console
+$ gitfetch --set modules.repo_health.enabled=true --set modules.top_repos.enabled=true
+$ gitfetch --set modules.releases.enabled=true --set modules.actions_status.enabled=true
+$ gitfetch --set modules.contribution_breakdown.enabled=true --token ghp_xxxx
+```
+
+Public optional modules include `social_accounts`, `organizations`, `starred`, `watched`, `gists`, `recent_activity`, `profile_readme`, `top_repos`, `releases`, `actions_status`, `repo_health`, `topics`, `dependencies`, `packages`, `commit_cadence`, and `maintainer_activity`.
+
+Token-backed optional modules include `contributions`, `sparkline`, `streaks`, `pull_requests`, `issues`, `pinned`, `showcase`, `sponsors`, `discussions`, `security_advisories`, and `contribution_breakdown`.
+
+## Config
+
+`Gitfetch` reads `~/.config/gitfetch/config.toml` by default. You can use another file with `--config`.
+
+```console
+$ gitfetch config init --preset compact
+$ gitfetch config init --preset full --force
+$ gitfetch --config ./gitfetch.toml --user octocat
+```
+
+You can override any dotted config value for one run.
+
+```console
+$ gitfetch --set display.avatar=false
+$ gitfetch --set modules.languages.limit=3
+$ gitfetch --set repo_filters.exclude_forks=false
+```
+
+## Plugins
+
+Plugin modules are local Python files that expose `register()` or `MODULES`. Add plugin paths and enabled plugin module names to `config.toml`.
+
+```console
+$ gitfetch --set 'plugins.paths=["./my_gitfetch_plugin.py"]' --set 'plugins.modules=["my_metric"]'
+```
+
+A minimal plugin looks like this.
+
+```python
+from gitfetch.modules.builtin import ModuleResult
+
+def my_metric(config, context, client):
+    return ModuleResult("my_metric", "My Metric", [f"repos: {len(context.repos)}"], {"repos": len(context.repos)})
+
+def register():
+    return {
+        "my_metric": {
+            "handler": my_metric,
+            "description": "Example local metric.",
+            "token_required": False,
+        }
+    }
+```
+
+## Completions
+
+Print a completion script for your shell, then source it from your shell config.
+
+```console
+$ gitfetch completions bash
+$ gitfetch completions zsh
+$ gitfetch completions fish
+```
 
 ## Troubleshooting
 
 Encountered an issue that isn't covered here? Open an issue or shoot me a message on Telegram, and I'll get it sorted asap!
+
+### A module says it requires a token 🔐
+
+Some GitHub data is only available through authenticated API calls. Pass `--token`, set `GITHUB_TOKEN`, configure `profile.token_env`, or use `profile.token_command`.
+
+```console
+$ export GITHUB_TOKEN=ghp_xxxx
+$ gitfetch --token ghp_xxxx
+$ gitfetch --set profile.token_command="security find-generic-password -a work -s gitfetch -w"
+```
 
 ### I want to uninstall `Gitfetch` 😔
 
