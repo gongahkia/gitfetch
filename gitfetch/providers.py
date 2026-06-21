@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -532,6 +533,453 @@ class GitLabClient(BaseProviderClient):
         }
 
 
+class GiteaClient(BaseProviderClient):
+    provider_name = "gitea"
+    provider_title = "Gitea"
+    supported_modules = {
+        "identity",
+        "stats",
+        "languages",
+        "contributions",
+        "sparkline",
+        "streaks",
+        "pull_requests",
+        "issues",
+        "social_accounts",
+        "organizations",
+        "starred",
+        "watched",
+        "recent_activity",
+        "profile_readme",
+        "top_repos",
+        "releases",
+        "repo_health",
+        "topics",
+        "packages",
+        "contribution_breakdown",
+        "commit_cadence",
+        "maintainer_activity",
+    }
+    token_required_modules = {"organizations", "starred", "watched"}
+    unsupported_reasons = {
+        "gists": "Gitea-compatible APIs have no gist/snippet equivalent in this provider layer",
+        "rate_limit": "Gitea-compatible APIs do not expose a portable public rate-limit endpoint here",
+        "pinned": "Gitea-compatible APIs have no GitHub-style pinned profile items",
+        "showcase": "Gitea-compatible APIs have no GitHub-style profile showcase API",
+        "sponsors": "Gitea-compatible APIs have no matching sponsors listing API",
+        "discussions": "Gitea-compatible APIs do not expose GitHub Discussions as a profile metric",
+        "actions_status": "Gitea-compatible Actions endpoints vary by host and are not stable enough for this provider layer",
+        "dependencies": "Gitea-compatible APIs do not expose a public SBOM summary API",
+        "security_advisories": "Gitea-compatible APIs do not expose repository advisory summaries as a public profile metric",
+    }
+
+    def __init__(self, token: str, cache: CacheStore, offline: bool, base_url: str) -> None:
+        super().__init__(token, cache, offline, base_url)
+        self.session.headers.update({"Accept": "application/json"})
+        if token:
+            self.session.headers["Authorization"] = f"token {token}"
+
+    def _paginate(self, path: str, params: dict[str, Any] | None = None, cache_key: str | None = None) -> list[dict[str, Any]]:
+        if cache_key:
+            cached = self.cache.get(cache_key)
+            if cached is not None:
+                return cached
+        if self.offline:
+            raise GitHubAPIError(f"offline mode: {path} not available in cache")
+        merged = dict(params or {})
+        merged.setdefault("limit", 50)
+        page = 1
+        items: list[dict[str, Any]] = []
+        while True:
+            merged["page"] = page
+            response = self.session.get(self._url(path), params=merged, timeout=20)
+            if response.status_code == 404:
+                raise GitHubAPIError(f"{self.provider_title} user or resource not found")
+            if response.status_code == 401:
+                raise GitHubAPIError(f"{self.provider_title} authentication failed")
+            if response.status_code == 403:
+                raise GitHubAPIError(f"{self.provider_title} rejected request: {self._message(response)}")
+            if not response.ok:
+                raise GitHubAPIError(f"{self.provider_title} API returned HTTP {response.status_code}")
+            payload = response.json()
+            if not isinstance(payload, list) or not payload:
+                break
+            items.extend(payload)
+            link = response.headers.get("Link", "")
+            if 'rel="next"' not in link:
+                break
+            page += 1
+        if cache_key:
+            self.cache.set(cache_key, items)
+        return items
+
+    def _count_list(self, path: str, params: dict[str, Any]) -> int:
+        if self.offline:
+            return 0
+        merged = dict(params)
+        merged["limit"] = 1
+        try:
+            response = self.session.get(self._url(path), params=merged, timeout=20)
+        except requests.RequestException:
+            return 0
+        if not response.ok:
+            return 0
+        total = response.headers.get("X-Total-Count")
+        if total and total.isdigit():
+            return int(total)
+        try:
+            payload = response.json()
+        except ValueError:
+            return 0
+        return len(payload) if isinstance(payload, list) else 0
+
+    def get_context(self, username: str, mode: str, repo_filters: dict[str, Any]) -> GitHubContext:
+        user = self.get_user(username)
+        authenticated_login = None
+        viewer_mode = False
+        if mode == "viewer" and self.token:
+            viewer = self.get_authenticated_user()
+            authenticated_login = viewer.get("login")
+            if authenticated_login and authenticated_login.lower() == username.lower():
+                user = viewer
+                viewer_mode = True
+        repos = filter_repos(self.get_repos(username, viewer_mode=viewer_mode), repo_filters)
+        user["public_repos"] = len(repos)
+        events = self.get_events(username, limit=100)
+        heatmap = self.get_heatmap(username)
+        graphql = self._graphql_like_bundle(username, heatmap)
+        return GitHubContext(
+            target_user=username,
+            user=user,
+            repos=repos,
+            events=events,
+            viewer_mode=viewer_mode,
+            authenticated_login=authenticated_login,
+            graphql=graphql,
+        )
+
+    def get_user(self, username: str) -> dict[str, Any]:
+        raw = self._get_json(f"/users/{quote(username, safe='')}", cache_key=self._cache_key("user", username))
+        return self._normalize_user(raw)
+
+    def get_authenticated_user(self) -> dict[str, Any]:
+        raw = self._get_json("/user", cache_key=self._cache_key("viewer", "self"))
+        return self._normalize_user(raw)
+
+    def get_repos(self, username: str, viewer_mode: bool = False) -> list[dict[str, Any]]:
+        if viewer_mode:
+            repos = self._paginate("/user/repos", cache_key=self._cache_key("repos", "viewer", username))
+        else:
+            repos = self._paginate(
+                f"/users/{quote(username, safe='')}/repos",
+                cache_key=self._cache_key("repos", "public", username),
+            )
+        return [self._normalize_repo(repo) for repo in repos]
+
+    def get_languages(self, languages_url: str) -> dict[str, int]:
+        payload = self._get_json_optional(languages_url, cache_key=self._cache_key("languages", languages_url), default={})
+        return payload if isinstance(payload, dict) else {}
+
+    def get_heatmap(self, username: str) -> list[dict[str, Any]]:
+        payload = self._get_json_optional(
+            f"/users/{quote(username, safe='')}/heatmap",
+            cache_key=self._cache_key("heatmap", username),
+            default=[],
+        )
+        return payload if isinstance(payload, list) else []
+
+    def get_events(self, username: str, limit: int = 10) -> list[dict[str, Any]]:
+        events = self._get_json_optional(
+            f"/users/{quote(username, safe='')}/activities/feeds",
+            params={"limit": min(max(limit, 1), 50)},
+            cache_key=self._cache_key("events", username, str(limit)),
+            default=[],
+        )
+        return [self._normalize_event(event) for event in events[:limit]] if isinstance(events, list) else []
+
+    def get_social_accounts(self, username: str) -> list[dict[str, Any]]:
+        user = self.get_user(username)
+        rows = [{"provider": self.provider_name, "url": user.get("html_url"), "display_name": user.get("login")}]
+        if user.get("blog"):
+            rows.append({"provider": "website", "url": user["blog"], "display_name": user["blog"]})
+        return [row for row in rows if row.get("url")]
+
+    def get_organizations(self, username: str) -> list[dict[str, Any]]:
+        orgs = self._get_json_optional(
+            f"/users/{quote(username, safe='')}/orgs",
+            cache_key=self._cache_key("orgs", username),
+            default=[],
+        )
+        return [self._normalize_org(org) for org in orgs] if isinstance(orgs, list) else []
+
+    def get_starred(self, username: str, limit: int) -> list[dict[str, Any]]:
+        repos = self._paginate(
+            f"/users/{quote(username, safe='')}/starred",
+            params={"limit": min(max(limit, 1), 50)},
+            cache_key=self._cache_key("starred", username, str(limit)),
+        )
+        return [self._normalize_repo(repo) for repo in repos[:limit]]
+
+    def get_subscriptions(self, username: str, limit: int) -> list[dict[str, Any]]:
+        repos = self._paginate(
+            f"/users/{quote(username, safe='')}/subscriptions",
+            params={"limit": min(max(limit, 1), 50)},
+            cache_key=self._cache_key("subscriptions", username, str(limit)),
+        )
+        return [self._normalize_repo(repo) for repo in repos[:limit]]
+
+    def get_gists(self, username: str, limit: int) -> list[dict[str, Any]]:
+        return []
+
+    def get_profile_readme(self, username: str) -> str | None:
+        repo = self._get_repo_optional(username, username)
+        if not repo:
+            return None
+        ref = repo.get("default_branch") or "main"
+        for name in ("README.md", "readme.md"):
+            payload = self._get_json_optional(
+                f"/repos/{quote(username, safe='')}/{quote(username, safe='')}/contents/{quote(name, safe='')}",
+                params={"ref": ref},
+                cache_key=self._cache_key("profile_readme", username, name, ref),
+                default=None,
+            )
+            content = self._decode_content(payload)
+            if content:
+                return content
+        return None
+
+    def get_repo(self, owner: str, name: str) -> dict[str, Any]:
+        repo = self._get_json(
+            f"/repos/{quote(owner, safe='')}/{quote(name, safe='')}",
+            cache_key=self._cache_key("repo", owner, name),
+        )
+        return self._normalize_repo(repo)
+
+    def get_repo_languages(self, owner: str, name: str) -> dict[str, int]:
+        repo = self.get_repo(owner, name)
+        return self.get_languages(repo.get("languages_url", ""))
+
+    def get_repo_contributors(self, owner: str, name: str, limit: int = 10) -> list[dict[str, Any]]:
+        commits = self.get_repo_commits(owner, name, limit=100)
+        counts: Counter[str] = Counter()
+        for commit in commits:
+            author = commit.get("author") or {}
+            commit_author = ((commit.get("commit") or {}).get("author") or {})
+            login = author.get("login") or commit_author.get("name") or "unknown"
+            counts[str(login)] += 1
+        return [{"login": login, "contributions": count} for login, count in counts.most_common(limit)]
+
+    def get_repo_commits(self, owner: str, name: str, limit: int = 5) -> list[dict[str, Any]]:
+        commits = self._get_json_optional(
+            f"/repos/{quote(owner, safe='')}/{quote(name, safe='')}/commits",
+            params={"limit": min(max(limit, 1), 50)},
+            cache_key=self._cache_key("repo_commits", owner, name, str(limit)),
+            default=[],
+        )
+        return [self._normalize_commit(commit) for commit in commits[:limit]] if isinstance(commits, list) else []
+
+    def get_repo_releases(self, owner: str, name: str, limit: int = 3) -> list[dict[str, Any]]:
+        releases = self._get_json_optional(
+            f"/repos/{quote(owner, safe='')}/{quote(name, safe='')}/releases",
+            params={"limit": min(max(limit, 1), 50)},
+            cache_key=self._cache_key("repo_releases", owner, name, str(limit)),
+            default=[],
+        )
+        return releases[:limit] if isinstance(releases, list) else []
+
+    def get_repo_workflow_runs(self, owner: str, name: str, limit: int = 1) -> list[dict[str, Any]]:
+        return []
+
+    def get_repo_discussions_count(self, owner: str, name: str) -> int | None:
+        return None
+
+    def get_repo_sbom(self, owner: str, name: str) -> dict[str, Any]:
+        return {}
+
+    def get_repo_security_advisories(self, owner: str, name: str, limit: int = 5) -> list[dict[str, Any]]:
+        return []
+
+    def get_user_packages(self, username: str, package_type: str, limit: int = 5) -> list[dict[str, Any]]:
+        packages = self._get_json_optional(
+            f"/packages/{quote(username, safe='')}",
+            params={"type": package_type, "limit": min(max(limit, 1), 50)},
+            cache_key=self._cache_key("packages", username, package_type, str(limit)),
+            default=[],
+        )
+        return packages[:limit] if isinstance(packages, list) else []
+
+    def get_org(self, name: str) -> dict[str, Any]:
+        org = self._get_json(f"/orgs/{quote(name, safe='')}", cache_key=self._cache_key("org", name))
+        return self._normalize_org(org)
+
+    def get_org_members(self, name: str, limit: int = 10) -> list[dict[str, Any]]:
+        members = self._get_json_optional(
+            f"/orgs/{quote(name, safe='')}/members",
+            params={"limit": min(max(limit, 1), 50)},
+            cache_key=self._cache_key("org_members", name, str(limit)),
+            default=[],
+        )
+        return [self._normalize_user(member) for member in members[:limit]] if isinstance(members, list) else []
+
+    def get_org_repos(self, name: str) -> list[dict[str, Any]]:
+        repos = self._paginate(
+            f"/orgs/{quote(name, safe='')}/repos",
+            cache_key=self._cache_key("org_repos", name),
+        )
+        return [self._normalize_repo(repo) for repo in repos]
+
+    def get_rate_limit(self) -> dict[str, Any]:
+        return {"rate": {"remaining": 0, "limit": 0}}
+
+    def _graphql_like_bundle(self, username: str, heatmap: list[dict[str, Any]]) -> dict[str, Any]:
+        open_prs = self._count_list("/repos/issues/search", {"owner": username, "type": "pulls", "state": "open"})
+        closed_prs = self._count_list("/repos/issues/search", {"owner": username, "type": "pulls", "state": "closed"})
+        open_issues = self._count_list("/repos/issues/search", {"owner": username, "type": "issues", "state": "open"})
+        closed_issues = self._count_list("/repos/issues/search", {"owner": username, "type": "issues", "state": "closed"})
+        days = _contribution_days_from_heatmap(heatmap)
+        total = sum(day["contributionCount"] for week in days for day in week["contributionDays"])
+        return {
+            "contributionsCollection": {
+                "totalCommitContributions": total,
+                "totalIssueContributions": open_issues + closed_issues,
+                "totalPullRequestContributions": open_prs + closed_prs,
+                "totalPullRequestReviewContributions": 0,
+                "contributionCalendar": {"totalContributions": total, "weeks": days},
+            },
+            "openPRs": {"totalCount": open_prs},
+            "mergedPRs": {"totalCount": 0},
+            "closedPRs": {"totalCount": closed_prs},
+            "openIssues": {"totalCount": open_issues},
+            "closedIssues": {"totalCount": closed_issues},
+        }
+
+    def _get_repo_optional(self, owner: str, name: str) -> dict[str, Any] | None:
+        payload = self._get_json_optional(
+            f"/repos/{quote(owner, safe='')}/{quote(name, safe='')}",
+            cache_key=self._cache_key("repo", owner, name),
+            default=None,
+        )
+        return self._normalize_repo(payload) if isinstance(payload, dict) else None
+
+    def _decode_content(self, payload: Any) -> str | None:
+        if not isinstance(payload, dict):
+            return None
+        content = payload.get("content")
+        if not isinstance(content, str):
+            return None
+        if payload.get("encoding") == "base64":
+            try:
+                return base64.b64decode(content).decode("utf-8", errors="replace")
+            except (ValueError, OSError):
+                return None
+        return content
+
+    def _normalize_user(self, raw: dict[str, Any]) -> dict[str, Any]:
+        last_login = raw.get("last_login")
+        if isinstance(last_login, str) and last_login.startswith("0001-01-01"):
+            last_login = None
+        return {
+            **raw,
+            "login": raw.get("login") or raw.get("username") or str(raw.get("id", "")),
+            "name": raw.get("full_name") or raw.get("login") or raw.get("username"),
+            "bio": raw.get("description") or "",
+            "blog": raw.get("website") or raw.get("html_url") or "",
+            "company": "",
+            "location": raw.get("location") or "",
+            "avatar_url": raw.get("avatar_url"),
+            "html_url": raw.get("html_url"),
+            "created_at": raw.get("created") or raw.get("created_at"),
+            "updated_at": raw.get("updated_at") or last_login or raw.get("created") or raw.get("created_at"),
+            "followers": raw.get("followers_count", 0),
+            "following": raw.get("following_count", 0),
+            "public_gists": 0,
+        }
+
+    def _normalize_repo(self, raw: dict[str, Any]) -> dict[str, Any]:
+        owner = raw.get("owner") or {}
+        license_payload = raw.get("license") or {}
+        license_id = license_payload.get("spdx_id") or license_payload.get("spdx_identifier") or license_payload.get("key") or license_payload.get("name")
+        return {
+            **raw,
+            "name": raw.get("name"),
+            "full_name": raw.get("full_name") or f"{owner.get('login') or owner.get('username') or ''}/{raw.get('name')}",
+            "description": raw.get("description"),
+            "homepage": raw.get("website") or raw.get("link") or "",
+            "html_url": raw.get("html_url"),
+            "stargazers_count": raw.get("stars_count", raw.get("stargazers_count", 0)),
+            "forks_count": raw.get("forks_count", 0),
+            "watchers_count": raw.get("watchers_count", raw.get("stars_count", 0)),
+            "subscribers_count": raw.get("watchers_count", 0),
+            "open_issues_count": raw.get("open_issues_count", 0),
+            "size": raw.get("size", 0),
+            "language": raw.get("language"),
+            "languages_url": raw.get("languages_url"),
+            "created_at": raw.get("created_at"),
+            "updated_at": raw.get("updated_at"),
+            "pushed_at": raw.get("updated_at"),
+            "archived": bool(raw.get("archived")),
+            "fork": bool(raw.get("fork")),
+            "is_template": bool(raw.get("template")),
+            "private": bool(raw.get("private") or raw.get("internal")),
+            "has_issues": bool(raw.get("has_issues", False)),
+            "topics": raw.get("topics") or [],
+            "default_branch": raw.get("default_branch") or "main",
+            "license": {"spdx_id": license_id} if license_id else None,
+            "owner": {
+                "login": owner.get("login") or owner.get("username") or "",
+                "avatar_url": owner.get("avatar_url"),
+            },
+        }
+
+    def _normalize_org(self, raw: dict[str, Any]) -> dict[str, Any]:
+        return {
+            **raw,
+            "login": raw.get("username") or raw.get("name") or raw.get("full_name"),
+            "name": raw.get("full_name") or raw.get("username") or raw.get("name"),
+            "description": raw.get("description"),
+            "blog": raw.get("website") or "",
+            "location": raw.get("location") or "",
+            "email": raw.get("email") or "",
+            "avatar_url": raw.get("avatar_url"),
+            "public_repos": raw.get("public_repos", 0),
+            "followers": raw.get("followers_count", 0),
+        }
+
+    def _normalize_event(self, raw: dict[str, Any]) -> dict[str, Any]:
+        op_type = str(raw.get("op_type") or "activity")
+        event_type = "PushEvent" if "push" in op_type else op_type
+        repo = raw.get("repo") or {}
+        return {
+            **raw,
+            "type": event_type,
+            "repo": {"name": repo.get("full_name") or repo.get("name") or "unknown repo"},
+            "created_at": raw.get("created") or raw.get("created_at"),
+            "payload": {"commits": [{}] if "push" in op_type else []},
+        }
+
+    def _normalize_commit(self, raw: dict[str, Any]) -> dict[str, Any]:
+        commit = raw.get("commit") or {}
+        author = commit.get("author") or {}
+        return {
+            **raw,
+            "sha": raw.get("sha") or raw.get("id"),
+            "commit": {
+                "message": commit.get("message") or raw.get("message") or "",
+                "author": {"name": author.get("name") or ((raw.get("author") or {}).get("login")) or "?"},
+            },
+        }
+
+
+class ForgejoClient(GiteaClient):
+    provider_name = "forgejo"
+    provider_title = "Forgejo"
+
+
+class CodebergClient(GiteaClient):
+    provider_name = "codeberg"
+    provider_title = "Codeberg"
+
+
 class BitbucketClient(BaseProviderClient):
     provider_name = "bitbucket"
     provider_title = "Bitbucket"
@@ -835,6 +1283,31 @@ def _contribution_days_from_events(events: list[dict[str, Any]]) -> list[dict[st
     return weeks
 
 
+def _contribution_days_from_heatmap(points: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    today = datetime.now(timezone.utc).date()
+    start = today - timedelta(days=83)
+    counts: Counter[str] = Counter()
+    for point in points:
+        try:
+            day = datetime.fromtimestamp(int(point.get("timestamp", 0)), timezone.utc).date()
+        except (TypeError, ValueError, OSError):
+            continue
+        if start <= day <= today:
+            counts[day.isoformat()] += int(point.get("contributions", 0) or 0)
+    weeks: list[dict[str, Any]] = []
+    cursor = start
+    while cursor <= today:
+        week_days = []
+        for _ in range(7):
+            if cursor > today:
+                break
+            iso = cursor.isoformat()
+            week_days.append({"date": iso, "contributionCount": counts[iso]})
+            cursor += timedelta(days=1)
+        weeks.append({"contributionDays": week_days})
+    return weeks
+
+
 def provider_name_from_config(config: dict[str, Any]) -> str:
     name = str(config.get("profile", {}).get("provider", "github")).lower()
     if name not in SUPPORTED_PROVIDERS:
@@ -849,10 +1322,18 @@ def provider_base_url(config: dict[str, Any], provider: str) -> str:
 def create_provider_client(config: dict[str, Any], token: str, cache: CacheStore, offline: bool = False):
     provider = provider_name_from_config(config)
     base_url = provider_base_url(config, provider)
+    if not base_url:
+        raise ConfigError(f"providers.{provider}.base_url must not be empty")
     if provider == "github":
         return GitHubClient(token=token, cache=cache, offline=offline, base_url=base_url)
     if provider == "gitlab":
         return GitLabClient(token=token, cache=cache, offline=offline, base_url=base_url)
     if provider == "bitbucket":
         return BitbucketClient(token=token, cache=cache, offline=offline, base_url=base_url)
+    if provider == "gitea":
+        return GiteaClient(token=token, cache=cache, offline=offline, base_url=base_url)
+    if provider == "forgejo":
+        return ForgejoClient(token=token, cache=cache, offline=offline, base_url=base_url)
+    if provider == "codeberg":
+        return CodebergClient(token=token, cache=cache, offline=offline, base_url=base_url)
     raise ConfigError(f"unsupported provider: {provider}")

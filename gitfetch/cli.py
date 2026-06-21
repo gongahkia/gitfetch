@@ -17,6 +17,7 @@ from gitfetch.config import (
     set_override,
     write_config,
     ConfigError,
+    PROVIDER_TOKEN_ENVS,
     SUPPORTED_PROVIDERS,
 )
 from gitfetch.github_api import GitHubAPIError, GitHubClient
@@ -27,13 +28,13 @@ from gitfetch.render import render_output
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Configurable GitHub profile fetch for the terminal")
+    parser = argparse.ArgumentParser(description="Configurable git provider profile fetch for the terminal")
     parser.add_argument("--version", action="version", version=f"gitfetch {__version__}")
-    parser.add_argument("--user", help="GitHub username override")
+    parser.add_argument("--user", help="Provider username or workspace override")
     parser.add_argument("--provider", choices=SUPPORTED_PROVIDERS, help="Git provider override")
     parser.add_argument("--base-url", help="Provider API base URL override")
     parser.add_argument("--profile", help="Saved profile name from config.toml")
-    parser.add_argument("--token", help="GitHub token override")
+    parser.add_argument("--token", help="Provider token override")
     parser.add_argument("--mode", choices=["public", "viewer"], help="Profile data mode override")
     parser.add_argument("--config", dest="config_path", help="Path to config.toml")
     parser.add_argument("--set", action="append", default=[], metavar="KEY=VALUE", help="Override a config value")
@@ -75,7 +76,7 @@ def build_parser() -> argparse.ArgumentParser:
     profile_set.add_argument("--user", required=True, help="Provider username or workspace for the profile")
     profile_set.add_argument("--provider", choices=SUPPORTED_PROVIDERS, default="github")
     profile_set.add_argument("--mode", choices=["public", "viewer"], default="public")
-    profile_set.add_argument("--token-env", default="GITHUB_TOKEN")
+    profile_set.add_argument("--token-env", default="")
     profile_set.add_argument("--token-command", default="")
     profile_remove = profiles_subparsers.add_parser("remove", help="Remove a saved profile")
     profile_remove.add_argument("name")
@@ -95,7 +96,7 @@ def build_parser() -> argparse.ArgumentParser:
     org_parser.add_argument("--repos-limit", type=int, default=8)
 
     compare_parser = subparsers.add_parser("compare", help="Render multiple users side-by-side")
-    compare_parser.add_argument("users", nargs="+", help="Two or more GitHub usernames")
+    compare_parser.add_argument("users", nargs="+", help="Two or more provider usernames")
     compare_parser.add_argument("--column-width", type=int, default=None, help="Width per column in characters (default: auto-fit terminal)")
 
     completions_parser = subparsers.add_parser("completions", help="Print shell completion script")
@@ -184,7 +185,7 @@ def handle_config_command(args: argparse.Namespace) -> int:
 
 
 def run_config_wizard() -> dict:
-    provider = input("Provider [github/gitlab/bitbucket] (github): ").strip().lower() or "github"
+    provider = input(f"Provider [{'/'.join(SUPPORTED_PROVIDERS)}] (github): ").strip().lower() or "github"
     if provider not in SUPPORTED_PROVIDERS:
         raise ConfigError(f"unknown provider: {provider}")
     username = input("Username/workspace: ").strip()
@@ -195,7 +196,8 @@ def run_config_wizard() -> dict:
     output_format = input("Default format [ansi/plain/json/svg/card] (ansi): ").strip() or "ansi"
     if output_format not in {"ansi", "plain", "json", "svg", "card"}:
         raise ConfigError(f"unsupported format: {output_format}")
-    token_env = input("Token env var (GITHUB_TOKEN): ").strip() or "GITHUB_TOKEN"
+    default_token_env = PROVIDER_TOKEN_ENVS.get(provider, "GITHUB_TOKEN")
+    token_env = input(f"Token env var ({default_token_env}): ").strip() or default_token_env
     config = preset_config(preset)
     config["profile"]["provider"] = provider
     config["profile"]["username"] = username
@@ -226,7 +228,7 @@ def handle_profiles_command(args: argparse.Namespace, path: Path) -> int:
             "provider": args.provider,
             "username": args.user,
             "mode": args.mode,
-            "token_env": args.token_env,
+            "token_env": args.token_env or PROVIDER_TOKEN_ENVS.get(args.provider, "GITHUB_TOKEN"),
             "token_command": args.token_command,
         }
         write_config(path, config)
@@ -271,7 +273,7 @@ def handle_token_command(args: argparse.Namespace) -> int:
     account = args.account
     service = args.service
     if args.token_command == "store":
-        token = args.token or getpass.getpass("GitHub token: ").strip()
+        token = args.token or getpass.getpass("Provider token: ").strip()
         if not token:
             raise ConfigError("empty token")
         result = subprocess.run(
@@ -336,12 +338,13 @@ def _png_output_path(args: argparse.Namespace) -> Path:
     return path
 
 
-def _token_required_result(name: str) -> ModuleResult:
+def _token_required_result(name: str, client=None) -> ModuleResult:
     title = name.replace("_", " ").title()
+    env_name = PROVIDER_TOKEN_ENVS.get(getattr(client, "provider_name", "github"), "GITHUB_TOKEN")
     return ModuleResult(
         name,
         title,
-        ["requires --token, GITHUB_TOKEN, or profile.token_command"],
+        [f"requires --token, {env_name}, or profile.token_command"],
         {"requires_token": True},
         requires_token=True,
     )
@@ -428,7 +431,7 @@ def handle_render_command(args: argparse.Namespace) -> int:
                 continue
             token_required = client.module_token_required(name, metadata.get(name, {}).get("token_required", False))
             if token_required and not token:
-                module_results.append(_token_required_result(name))
+                module_results.append(_token_required_result(name, client))
                 continue
             result = MODULE_HANDLERS[name](config, context, client)
             hide_if_empty = config["modules"].get(name, {}).get("hide_if_empty", True)

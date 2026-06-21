@@ -4,12 +4,12 @@
 
 # `Gitfetch` 🛻
 
-Serving you snapshots of your [GitHub](https://github.com/) profile in the [CLI](https://en.wikipedia.org/wiki/Command-line_interface). 
+Serving you snapshots of your git provider profile in the [CLI](https://en.wikipedia.org/wiki/Command-line_interface).
 
 ## Stack
 
 * *Scripting*: [Python](https://www.python.org/), [Pip](https://pypi.org/project/pip/), [Pillow](https://pypi.org/project/Pillow/), [Requests](https://pypi.org/project/requests/)
-* *API*: [GitHub Rest API](https://docs.github.com/en/rest?apiVersion=2022-11-28)
+* *API*: [GitHub Rest API](https://docs.github.com/en/rest?apiVersion=2022-11-28), [GitLab REST API](https://docs.gitlab.com/api/rest/), [Bitbucket Cloud REST API](https://developer.atlassian.com/cloud/bitbucket/rest/), [Gitea REST API](https://docs.gitea.com/api/), [Forgejo API](https://forgejo.org/docs/latest/user/api-usage/)
 
 ## Screenshots
 
@@ -19,12 +19,13 @@ Serving you snapshots of your [GitHub](https://github.com/) profile in the [CLI]
 
 ## Features
 
-- ASCII art avatar rendered from your GitHub profile picture
+- ASCII art avatar rendered from your provider profile picture
+- Provider support for GitHub, GitLab, Bitbucket Cloud, Gitea, Forgejo, and Codeberg
 - Profile stats: hours since joining, public repos, followers, days since last commit
 - Top-5 language breakdown by repository bytes
 - Contribution heatmap (last 12 weeks, requires `--token`)
 - Config presets: `minimal`, `compact`, `full`, and `showcase`
-- Named profiles for switching between saved GitHub users or token sources
+- Named profiles for switching between saved provider users or token sources
 - Public and authenticated viewer modes
 - Terminal themes, margins, color controls, and split or stacked layouts
 - Avatar styles: `ascii`, `halfblock`, and `braille`
@@ -59,8 +60,12 @@ $ ./mainInstall.sh
 ```console
 $ gitfetch # uses saved username
 $ gitfetch --user octocat # specify username
+$ gitfetch --provider gitlab --user gitlab-org # render a GitLab user or namespace
+$ gitfetch --provider bitbucket --user atlassian # render a Bitbucket workspace
+$ gitfetch --provider codeberg --user forgejo # render a Codeberg profile or org
+$ gitfetch --provider gitea --user gitea # render a Gitea.com profile or org
 $ gitfetch --no-avatar # stats only, no ASCII art
-$ gitfetch --token ghp_xxxx # authenticated (5000 req/hr), also accepts a GITHUB_TOKEN env variable as fallback
+$ gitfetch --token ghp_xxxx # authenticated; also accepts provider env variables such as GITHUB_TOKEN, GITLAB_TOKEN, BITBUCKET_TOKEN, GITEA_TOKEN, FORGEJO_TOKEN, or CODEBERG_TOKEN
 ```
 
 3. You can also render repositories, organizations, comparisons, and files directly from the CLI.
@@ -69,6 +74,10 @@ $ gitfetch --token ghp_xxxx # authenticated (5000 req/hr), also accepts a GITHUB
 $ gitfetch repo octocat/Hello-World # render a repository profile
 $ gitfetch org github # render an organization profile
 $ gitfetch compare octocat torvalds # compare two or more users side-by-side
+$ gitfetch --provider gitlab repo gitlab-org/gitlab # render a GitLab project
+$ gitfetch --provider bitbucket repo atlassian/python-bitbucket # render a Bitbucket repository
+$ gitfetch --provider codeberg repo forgejo/forgejo # render a Codeberg repository
+$ gitfetch --provider gitea repo gitea/tea # render a Gitea.com repository
 $ gitfetch --format json --user octocat # machine-readable output
 $ gitfetch --format svg --save profile.svg --user octocat # terminal render as SVG
 $ gitfetch --format card --save profile-card.svg --user octocat # shareable profile card
@@ -83,10 +92,12 @@ $ gitfetch config validate
 $ gitfetch config path
 ```
 
-5. For multiple GitHub accounts or saved targets, store named profiles in your config.
+5. For multiple accounts or saved targets, store named profiles in your config.
 
 ```console
-$ gitfetch config profiles set work --user octocat --mode public
+$ gitfetch config profiles set work --provider github --user octocat --mode public
+$ gitfetch config profiles set lab --provider gitlab --user gitlab-org --token-env GITLAB_TOKEN
+$ gitfetch config profiles set forge --provider codeberg --user forgejo --token-env CODEBERG_TOKEN
 $ gitfetch config profiles list
 $ gitfetch --profile work
 ```
@@ -101,7 +112,7 @@ $ gitfetch --set profile.token_command="security find-generic-password -a work -
 
 ## Modules
 
-Run the below command to inspect all supported modules and whether they require a GitHub token.
+Run the below command to inspect all supported modules and whether they require a token.
 
 ```console
 $ gitfetch modules list
@@ -119,6 +130,8 @@ Public optional modules include `social_accounts`, `organizations`, `starred`, `
 
 Token-backed optional modules include `contributions`, `sparkline`, `streaks`, `pull_requests`, `issues`, `pinned`, `showcase`, `sponsors`, `discussions`, `security_advisories`, and `contribution_breakdown`.
 
+Provider support is best-effort. GitHub remains the only provider with every GitHub-specific module. GitLab, Bitbucket, Gitea, Forgejo, and Codeberg render equivalent data where their public APIs expose it; unavailable modules print an explicit unsupported-provider message.
+
 ## Config
 
 `Gitfetch` reads `~/.config/gitfetch/config.toml` by default. You can use another file with `--config`.
@@ -127,12 +140,18 @@ Token-backed optional modules include `contributions`, `sparkline`, `streaks`, `
 $ gitfetch config init --preset compact
 $ gitfetch config init --preset full --force
 $ gitfetch --config ./gitfetch.toml --user octocat
+$ gitfetch --provider gitlab --base-url https://gitlab.example.com/api/v4 --user alice
+$ gitfetch --provider gitea --base-url https://git.example.com/api/v1 --user alice
+$ gitfetch --provider forgejo --base-url https://forgejo.example.com/api/v1 --user alice
 ```
 
 You can override any dotted config value for one run.
 
 ```console
 $ gitfetch --set display.avatar=false
+$ gitfetch --set profile.provider=gitlab
+$ gitfetch --set providers.gitlab.base_url=https://gitlab.example.com/api/v4
+$ gitfetch --set providers.forgejo.base_url=https://forgejo.example.com/api/v1
 $ gitfetch --set modules.languages.limit=3
 $ gitfetch --set repo_filters.exclude_forks=false
 ```
@@ -179,10 +198,15 @@ Encountered an issue that isn't covered here? Open an issue or shoot me a messag
 
 ### A module says it requires a token 🔐
 
-Some GitHub data is only available through authenticated API calls. Pass `--token`, set `GITHUB_TOKEN`, configure `profile.token_env`, or use `profile.token_command`.
+Some provider data is only available through authenticated API calls. Pass `--token`, set `GITHUB_TOKEN`, `GITLAB_TOKEN`, `BITBUCKET_TOKEN`, `GITEA_TOKEN`, `FORGEJO_TOKEN`, or `CODEBERG_TOKEN`, configure `profile.token_env`, or use `profile.token_command`.
 
 ```console
 $ export GITHUB_TOKEN=ghp_xxxx
+$ export GITLAB_TOKEN=glpat_xxxx
+$ export BITBUCKET_TOKEN=xxxx
+$ export GITEA_TOKEN=xxxx
+$ export FORGEJO_TOKEN=xxxx
+$ export CODEBERG_TOKEN=xxxx
 $ gitfetch --token ghp_xxxx
 $ gitfetch --set profile.token_command="security find-generic-password -a work -s gitfetch -w"
 ```
@@ -219,7 +243,7 @@ $ cat .bashrc
 **Step 5:**
 Check to ensure that the line has been added. End your terminal session and start a new one to reload `.bashrc` file.
 
-### I typed the wrong GitHub username and want to change it 🤡
+### I typed the wrong username and want to change it 🤡
 
 **Step 1:**  
 ```console
@@ -228,16 +252,16 @@ $ ls -a
 ```
 
 **Step 2:**  
-Check to ensure that the file titled `.gitfetchConfig` shows up.
+Check to ensure that the file titled `config.toml` shows up.
 
 **Step 3:**  
-Use your favourite text editor to edit the value associated with the *'username'* key in the file.
+Use your favourite text editor to edit `profile.username`.
 
 **Step 4:**  
 ```console
-$ nvim .gitfetchConfig
-$ cat .gitfetchConfig
+$ nvim config.toml
+$ cat config.toml
 ```
 
 **Step 5:**
-Check to ensure that your username has been updated. End your terminal session and start a new one to reload `.gitfetchConfig` file.
+Check to ensure that your username has been updated. The next `gitfetch` run reads `config.toml`.
