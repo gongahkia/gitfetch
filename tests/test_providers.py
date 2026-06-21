@@ -68,11 +68,77 @@ class ProviderTests(unittest.TestCase):
         self.assertFalse(client.supports_module("contributions"))
         self.assertTrue(client.supports_module("custom_plugin_metric"))
 
+    def test_bitbucket_snippets_map_to_gists(self) -> None:
+        client = BitbucketClient("", _cache(), False, "https://api.bitbucket.org/2.0")
+        with mock.patch.object(
+            client,
+            "_get_json_optional",
+            return_value={"values": [{"id": "abc", "title": "note", "links": {"html": {"href": "https://bb/snippet"}}}]},
+        ):
+            gists = client.get_gists("workspace", 1)
+        self.assertEqual(gists[0]["id"], "abc")
+        self.assertEqual(gists[0]["description"], "note")
+
+    def test_bitbucket_releases_fall_back_to_tags(self) -> None:
+        client = BitbucketClient("", _cache(), False, "https://api.bitbucket.org/2.0")
+        with mock.patch.object(
+            client,
+            "_get_json_optional",
+            side_effect=[
+                {"values": []},
+                {"values": [{"name": "v1", "target": {"date": "2024-01-01T00:00:00Z"}, "links": {"html": {"href": "https://bb/tag"}}}]},
+            ],
+        ):
+            releases = client.get_repo_releases("workspace", "repo", 1)
+        self.assertEqual(releases[0]["tag_name"], "v1")
+        self.assertEqual(releases[0]["published_at"], "2024-01-01T00:00:00Z")
+
+    def test_bitbucket_profile_readme_uses_same_name_repo(self) -> None:
+        client = BitbucketClient("", _cache(), False, "https://api.bitbucket.org/2.0")
+        with mock.patch.object(client, "_get_json_optional", return_value={"mainbranch": {"name": "main"}}), mock.patch.object(
+            client,
+            "_get_text_optional",
+            return_value="# hello",
+        ):
+            self.assertEqual(client.get_profile_readme("workspace"), "# hello")
+
     def test_provider_specific_token_env_precedes_github_fallback(self) -> None:
         config = preset_config("minimal")
         config["profile"]["provider"] = "gitlab"
         with mock.patch.dict("os.environ", {"GITLAB_TOKEN": "gl-token", "GITHUB_TOKEN": "gh-token"}, clear=True):
             self.assertEqual(get_token(None, config), "gl-token")
+
+    def test_gitlab_dependencies_map_to_sbom_shape(self) -> None:
+        client = GitLabClient("", _cache(), False, "https://gitlab.com/api/v4")
+        with mock.patch.object(client, "get_repo", return_value={"id": 42}), mock.patch.object(
+            client,
+            "_get_json_optional",
+            return_value=[{"name": "rails", "version": "7", "package_manager": "bundler"}],
+        ):
+            sbom = client.get_repo_sbom("group", "repo")
+        self.assertEqual(sbom["sbom"]["packages"][0]["name"], "rails")
+        self.assertEqual(sbom["sbom"]["packages"][0]["package_manager"], "bundler")
+
+    def test_gitlab_security_findings_map_to_advisory_shape(self) -> None:
+        client = GitLabClient("", _cache(), False, "https://gitlab.com/api/v4")
+        with mock.patch.object(client, "get_repo", return_value={"id": 42}), mock.patch.object(
+            client,
+            "_get_json_optional",
+            return_value=[{"name": "Possible command injection", "severity": "high"}],
+        ):
+            advisories = client.get_repo_security_advisories("group", "repo", 1)
+        self.assertEqual(advisories[0]["summary"], "Possible command injection")
+        self.assertEqual(advisories[0]["severity"], "high")
+
+    def test_gitlab_group_packages_are_exposed(self) -> None:
+        client = GitLabClient("", _cache(), False, "https://gitlab.com/api/v4")
+        with mock.patch.object(
+            client,
+            "_get_json_optional",
+            side_effect=[{"id": 7}, [{"name": "pkg", "package_type": "npm"}]],
+        ):
+            packages = client.get_user_packages("group", "npm", 1)
+        self.assertEqual(packages[0]["name"], "pkg")
 
     def test_gitea_family_factory_selects_provider_and_base_url(self) -> None:
         config = preset_config("minimal")
@@ -145,6 +211,17 @@ class ProviderTests(unittest.TestCase):
         today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
         graphql = client._graphql_like_bundle("alice", [{"timestamp": int(today.timestamp()), "contributions": 2}])
         self.assertEqual(graphql["contributionsCollection"]["contributionCalendar"]["totalContributions"], 2)
+
+    def test_gitea_actions_runs_map_to_workflow_shape(self) -> None:
+        client = GiteaClient("", _cache(), False, "https://gitea.com/api/v1")
+        response = mock.Mock()
+        response.ok = True
+        response.status_code = 200
+        response.json.return_value = {"workflow_runs": [{"name": "ci", "status": "success", "html_url": "https://gitea/run"}]}
+        with mock.patch.object(client.session, "get", return_value=response):
+            runs = client.get_repo_workflow_runs("owner", "repo", 1)
+        self.assertEqual(runs[0]["name"], "ci")
+        self.assertEqual(runs[0]["conclusion"], "success")
 
     def test_gitea_family_cache_key_is_provider_scoped(self) -> None:
         gitea = GiteaClient("", _cache(), False, "https://gitea.com/api/v1")
