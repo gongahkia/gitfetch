@@ -17,6 +17,14 @@ DEFAULT_MODULE_ORDER = [
     "contributions",
 ]
 
+SUPPORTED_PROVIDERS = ["github", "gitlab", "bitbucket"]
+
+PROVIDER_TOKEN_ENVS = {
+    "github": "GITHUB_TOKEN",
+    "gitlab": "GITLAB_TOKEN",
+    "bitbucket": "BITBUCKET_TOKEN",
+}
+
 OPTIONAL_MODULES = [
     "sparkline",
     "streaks",
@@ -49,10 +57,25 @@ OPTIONAL_MODULES = [
 
 DEFAULT_CONFIG: dict[str, Any] = {
     "profile": {
+        "provider": "github",
         "username": "",
         "mode": "public",
         "token_env": "GITHUB_TOKEN",
         "token_command": "",
+    },
+    "providers": {
+        "github": {
+            "base_url": "https://api.github.com",
+            "token_env": "GITHUB_TOKEN",
+        },
+        "gitlab": {
+            "base_url": "https://gitlab.com/api/v4",
+            "token_env": "GITLAB_TOKEN",
+        },
+        "bitbucket": {
+            "base_url": "https://api.bitbucket.org/2.0",
+            "token_env": "BITBUCKET_TOKEN",
+        },
     },
     "profiles": {},
     "plugins": {
@@ -408,6 +431,18 @@ def normalize_config(config: dict[str, Any]) -> None:
         if name not in seen:
             normalized_order.append(name)
     modules["order"] = normalized_order
+    provider = str(config["profile"].get("provider", "github")).lower()
+    if provider not in SUPPORTED_PROVIDERS:
+        raise ConfigError(f"profile.provider must be one of: {', '.join(SUPPORTED_PROVIDERS)}")
+    config["profile"]["provider"] = provider
+    providers = config.setdefault("providers", {})
+    for name in SUPPORTED_PROVIDERS:
+        provider_config = providers.setdefault(name, {})
+        default_provider = DEFAULT_CONFIG["providers"][name]
+        provider_config.setdefault("base_url", default_provider["base_url"])
+        provider_config.setdefault("token_env", default_provider["token_env"])
+        if not str(provider_config.get("base_url", "")).strip():
+            raise ConfigError(f"providers.{name}.base_url must not be empty")
     if config["profile"].get("mode") not in {"public", "viewer"}:
         raise ConfigError("profile.mode must be 'public' or 'viewer'")
     if config["display"].get("layout") not in {"split", "stack"}:
@@ -435,10 +470,25 @@ def normalize_config(config: dict[str, Any]) -> None:
 def get_token(cli_token: str | None, config: dict[str, Any]) -> str:
     if cli_token:
         return cli_token
-    env_name = config.get("profile", {}).get("token_env", "GITHUB_TOKEN")
-    env_token = os.environ.get(env_name, "")
-    if env_token:
-        return env_token
+    profile = config.get("profile", {})
+    provider = str(profile.get("provider", "github")).lower()
+    provider_config = config.get("providers", {}).get(provider, {})
+    env_names: list[str] = []
+    provider_env = str(provider_config.get("token_env") or PROVIDER_TOKEN_ENVS.get(provider, "GITHUB_TOKEN"))
+    profile_env = str(profile.get("token_env") or "")
+    if profile_env and (provider == "github" or profile_env != "GITHUB_TOKEN"):
+        env_names.append(profile_env)
+    if provider_env:
+        env_names.append(provider_env)
+    default_env = PROVIDER_TOKEN_ENVS.get(provider)
+    if default_env:
+        env_names.append(default_env)
+    if profile_env:
+        env_names.append(profile_env)
+    for env_name in dict.fromkeys(env_names):
+        env_token = os.environ.get(env_name, "")
+        if env_token:
+            return env_token
     token_command = config.get("profile", {}).get("token_command", "")
     if token_command:
         import shlex
