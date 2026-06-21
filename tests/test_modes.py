@@ -13,10 +13,22 @@ def _write_minimal_config(path: Path) -> None:
         main(["--config", str(path), "config", "init", "--preset", "minimal"])
 
 
-@mock.patch("gitfetch.modes.GitHubClient")
+def _configured_client(mock_client_factory: mock.Mock) -> mock.Mock:
+    instance = mock.Mock()
+    instance.token = ""
+    instance.provider_name = "github"
+    instance.provider_title = "GitHub"
+    instance.supports_module.return_value = True
+    instance.module_token_required.side_effect = lambda _name, default: default
+    instance.unsupported_reason.return_value = "unsupported"
+    mock_client_factory.return_value = instance
+    return instance
+
+
+@mock.patch("gitfetch.modes.create_provider_client")
 class ModesTests(unittest.TestCase):
-    def test_repo_subcommand_renders(self, mock_client_cls: mock.Mock) -> None:
-        instance = mock_client_cls.return_value
+    def test_repo_subcommand_renders(self, mock_client_factory: mock.Mock) -> None:
+        instance = _configured_client(mock_client_factory)
         instance.get_repo.return_value = {
             "full_name": "octocat/Hello-World",
             "description": "First repo",
@@ -52,8 +64,8 @@ class ModesTests(unittest.TestCase):
             self.assertIn("alice", out)
             self.assertIn("first commit", out)
 
-    def test_repo_subcommand_json_format(self, mock_client_cls: mock.Mock) -> None:
-        instance = mock_client_cls.return_value
+    def test_repo_subcommand_json_format(self, mock_client_factory: mock.Mock) -> None:
+        instance = _configured_client(mock_client_factory)
         instance.get_repo.return_value = {
             "full_name": "octocat/Hello-World",
             "description": "First repo",
@@ -83,8 +95,8 @@ class ModesTests(unittest.TestCase):
             self.assertIn('"type": "repository"', out)
             self.assertIn('"languages"', out)
 
-    def test_org_subcommand_renders(self, mock_client_cls: mock.Mock) -> None:
-        instance = mock_client_cls.return_value
+    def test_org_subcommand_renders(self, mock_client_factory: mock.Mock) -> None:
+        instance = _configured_client(mock_client_factory)
         instance.get_org.return_value = {
             "login": "github",
             "name": "GitHub",
@@ -115,8 +127,8 @@ class ModesTests(unittest.TestCase):
             self.assertIn("alice", out)
             self.assertIn("total stars: 700", out)
 
-    def test_compare_subcommand_renders_two_users(self, mock_client_cls: mock.Mock) -> None:
-        instance = mock_client_cls.return_value
+    def test_compare_subcommand_renders_two_users(self, mock_client_factory: mock.Mock) -> None:
+        instance = _configured_client(mock_client_factory)
 
         def fake_context(username, mode, repo_filters):
             ctx = mock.Mock()

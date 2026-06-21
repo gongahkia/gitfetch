@@ -11,6 +11,7 @@ class CompletionsTests(unittest.TestCase):
         self.assertIn("_gitfetch_completions", out)
         self.assertIn("complete -F", out)
         self.assertIn("ansi plain json svg card", out)
+        self.assertIn("github gitlab bitbucket", out)
 
     def test_zsh_script_has_compdef(self) -> None:
         out = script_for("zsh")
