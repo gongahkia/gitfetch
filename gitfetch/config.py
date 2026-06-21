@@ -17,12 +17,15 @@ DEFAULT_MODULE_ORDER = [
     "contributions",
 ]
 
-SUPPORTED_PROVIDERS = ["github", "gitlab", "bitbucket"]
+SUPPORTED_PROVIDERS = ["github", "gitlab", "bitbucket", "gitea", "forgejo", "codeberg"]
 
 PROVIDER_TOKEN_ENVS = {
     "github": "GITHUB_TOKEN",
     "gitlab": "GITLAB_TOKEN",
     "bitbucket": "BITBUCKET_TOKEN",
+    "gitea": "GITEA_TOKEN",
+    "forgejo": "FORGEJO_TOKEN",
+    "codeberg": "CODEBERG_TOKEN",
 }
 
 OPTIONAL_MODULES = [
@@ -75,6 +78,18 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "bitbucket": {
             "base_url": "https://api.bitbucket.org/2.0",
             "token_env": "BITBUCKET_TOKEN",
+        },
+        "gitea": {
+            "base_url": "https://gitea.com/api/v1",
+            "token_env": "GITEA_TOKEN",
+        },
+        "forgejo": {
+            "base_url": "",
+            "token_env": "FORGEJO_TOKEN",
+        },
+        "codeberg": {
+            "base_url": "https://codeberg.org/api/v1",
+            "token_env": "CODEBERG_TOKEN",
         },
     },
     "profiles": {},
@@ -441,7 +456,7 @@ def normalize_config(config: dict[str, Any]) -> None:
         default_provider = DEFAULT_CONFIG["providers"][name]
         provider_config.setdefault("base_url", default_provider["base_url"])
         provider_config.setdefault("token_env", default_provider["token_env"])
-        if not str(provider_config.get("base_url", "")).strip():
+        if name == provider and not str(provider_config.get("base_url", "")).strip():
             raise ConfigError(f"providers.{name}.base_url must not be empty")
     if config["profile"].get("mode") not in {"public", "viewer"}:
         raise ConfigError("profile.mode must be 'public' or 'viewer'")

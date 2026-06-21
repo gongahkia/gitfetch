@@ -75,11 +75,17 @@ def module_stats(config: dict[str, Any], context: GitHubContext, client: GitHubC
         f"{user.get('following', 0)} following",
     ])
     if latest_public_event:
-        lines.append(f"last public activity: {format_relative_days(latest_public_event)}")
+        relative = format_relative_days(latest_public_event)
+        if relative:
+            lines.append(f"last public activity: {relative}")
     elif latest_repo_activity:
-        lines.append(f"last repo activity: {format_relative_days(latest_repo_activity)}")
+        relative = format_relative_days(latest_repo_activity)
+        if relative:
+            lines.append(f"last repo activity: {relative}")
     if user.get("updated_at"):
-        lines.append(f"profile updated: {format_relative_days(user['updated_at'])}")
+        relative = format_relative_days(user["updated_at"])
+        if relative:
+            lines.append(f"profile updated: {relative}")
     if context.viewer_mode:
         private_count = sum(1 for repo in context.repos if repo.get("private"))
         if private_count:
@@ -207,7 +213,8 @@ def module_recent_activity(config: dict[str, Any], context: GitHubContext, clien
     data = []
     for event in events:
         repo_name = (event.get("repo") or {}).get("name", "unknown repo")
-        line = f"{event.get('type')}: {repo_name} ({format_relative_days(event.get('created_at'))})"
+        relative = format_relative_days(event.get("created_at"))
+        line = f"{event.get('type')}: {repo_name}" + (f" ({relative})" if relative else "")
         lines.append(line)
         data.append({"type": event.get("type"), "repo": repo_name, "created_at": event.get("created_at")})
     return ModuleResult("recent_activity", "Recent Activity", lines, data, hidden=not bool(lines))

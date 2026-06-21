@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from gitfetch.config import SUPPORTED_PROVIDERS
+
 
 COMMANDS = ["config", "modules", "repo", "org", "compare", "completions", "token"]
 TOP_FLAGS = [
@@ -20,7 +22,7 @@ THEME_VALUES = _theme_names()
 STYLE_VALUES = ["ascii", "halfblock", "braille"]
 COLOR_VALUES = ["auto", "none", "256", "truecolor"]
 MODE_VALUES = ["public", "viewer"]
-PROVIDER_VALUES = ["github", "gitlab", "bitbucket"]
+PROVIDER_VALUES = SUPPORTED_PROVIDERS
 
 
 BASH = """\
@@ -55,11 +57,11 @@ _gitfetch() {{
     local -a cmds
     cmds=({commands_zsh})
     _arguments -C \\
-        '--user[GitHub username]:user:' \\
+        '--user[Provider username or workspace]:user:' \\
         '--provider[Git provider]:provider:({providers})' \\
         '--base-url[Provider API base URL]:url:' \\
         '--profile[Saved profile name]:profile:' \\
-        '--token[GitHub token]:token:' \\
+        '--token[Provider token]:token:' \\
         '--mode[Profile mode]:mode:({modes})' \\
         '--config[Path to config.toml]:file:_files' \\
         '--set[Override config value]:override:' \\
@@ -87,11 +89,11 @@ compdef _gitfetch gitfetch
 
 FISH = """\
 complete -c gitfetch -n "__fish_use_subcommand" -a "{commands}"
-complete -c gitfetch -l user -x -d "GitHub username"
+complete -c gitfetch -l user -x -d "Provider username or workspace"
 complete -c gitfetch -l provider -x -a "{providers}" -d "Git provider"
 complete -c gitfetch -l base-url -x -d "Provider API base URL"
 complete -c gitfetch -l profile -x -d "Saved profile name"
-complete -c gitfetch -l token -x -d "GitHub token"
+complete -c gitfetch -l token -x -d "Provider token"
 complete -c gitfetch -l mode -x -a "{modes}" -d "Profile mode"
 complete -c gitfetch -l config -F -d "Path to config.toml"
 complete -c gitfetch -l set -x -d "Override KEY=VALUE"

@@ -14,6 +14,7 @@ from gitfetch.config import (
     get_token,
     load_config,
     normalize_config,
+    PROVIDER_TOKEN_ENVS,
     set_override,
     ConfigError,
 )
@@ -207,11 +208,12 @@ def _emit_mode_output(
     _write_or_print(_render_with_lines(config, output_format, avatar_url, text), args)
 
 
-def _token_required_result(name: str) -> ModuleResult:
+def _token_required_result(name: str, client=None) -> ModuleResult:
+    env_name = PROVIDER_TOKEN_ENVS.get(getattr(client, "provider_name", "github"), "GITHUB_TOKEN")
     return ModuleResult(
         name,
         name.replace("_", " ").title(),
-        ["requires --token, GITHUB_TOKEN, or profile.token_command"],
+        [f"requires --token, {env_name}, or profile.token_command"],
         {"requires_token": True},
         requires_token=True,
     )
@@ -373,8 +375,9 @@ def handle_org_command(args: argparse.Namespace) -> int:
         identity_lines.append(f"email: {org['email']}")
 
     total_stars = sum(r.get("stargazers_count", 0) for r in repos)
+    public_repos = org.get("public_repos") or len(repos)
     stats_lines = [
-        f"public repos: {org.get('public_repos', len(repos))}",
+        f"public repos: {public_repos}",
         f"members shown: {len(members)}",
         f"total stars: {total_stars}",
         f"followers: {org.get('followers', 0)}",
@@ -451,7 +454,7 @@ def handle_compare_command(args: argparse.Namespace) -> int:
                     continue
                 token_required = client.module_token_required(name, metadata.get(name, {}).get("token_required", False))
                 if token_required and not client.token:
-                    modules.append(_token_required_result(name))
+                    modules.append(_token_required_result(name, client))
                     continue
                 result = MODULE_HANDLERS[name](config, ctx, client)
             except KeyError:
