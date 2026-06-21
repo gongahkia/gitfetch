@@ -93,6 +93,28 @@ class BaseProviderClient:
         except (GitHubAPIError, requests.RequestException, ValueError):
             return default
 
+    def _get_text_optional(
+        self,
+        path: str,
+        params: dict[str, Any] | None = None,
+        cache_key: str | None = None,
+    ) -> str | None:
+        if cache_key:
+            cached = self.cache.get(cache_key)
+            if cached is not None:
+                return cached
+        if self.offline:
+            return None
+        try:
+            response = self.session.get(self._url(path), params=params, timeout=20)
+        except requests.RequestException:
+            return None
+        if not response.ok:
+            return None
+        if cache_key:
+            self.cache.set(cache_key, response.text)
+        return response.text
+
 
 class GitLabClient(BaseProviderClient):
     provider_name = "gitlab"
@@ -117,10 +139,14 @@ class GitLabClient(BaseProviderClient):
         "actions_status",
         "repo_health",
         "topics",
+        "dependencies",
+        "security_advisories",
+        "packages",
         "contribution_breakdown",
         "commit_cadence",
         "maintainer_activity",
     }
+    token_required_modules = {"dependencies", "security_advisories"}
     unsupported_reasons = {
         "watched": "GitLab has no matching public watched-repositories API",
         "rate_limit": "GitLab does not expose a portable public rate-limit endpoint here",
@@ -128,9 +154,6 @@ class GitLabClient(BaseProviderClient):
         "showcase": "GitLab has no GitHub-style profile showcase API",
         "sponsors": "GitLab has no matching sponsors listing API",
         "discussions": "GitLab discussions are not exposed as a profile-level public metric",
-        "dependencies": "GitLab dependency data is project/security-feature specific",
-        "security_advisories": "GitLab security advisory data is not a public profile metric",
-        "packages": "GitLab package data is project scoped, not user scoped here",
     }
 
     def __init__(self, token: str, cache: CacheStore, offline: bool, base_url: str) -> None:
@@ -377,13 +400,87 @@ class GitLabClient(BaseProviderClient):
         return None
 
     def get_repo_sbom(self, owner: str, name: str) -> dict[str, Any]:
-        return {}
+        project = self.get_repo(owner, name)
+        dependencies = self._get_json_optional(
+            f"/projects/{quote(str(project['id']), safe='')}/dependencies",
+            params={"per_page": 100},
+            cache_key=self._cache_key("repo_dependencies", owner, name),
+            default=[],
+        )
+        if not isinstance(dependencies, list):
+            return {}
+        packages = []
+        for dependency in dependencies:
+            packages.append(
+                {
+                    "name": dependency.get("name") or dependency.get("package_name"),
+                    "version": dependency.get("version"),
+                    "package_manager": dependency.get("package_manager"),
+                    "licenses": dependency.get("licenses") or [],
+                    "vulnerabilities": dependency.get("vulnerabilities") or [],
+                }
+            )
+        return {"sbom": {"packages": [package for package in packages if package.get("name")]}}
 
     def get_repo_security_advisories(self, owner: str, name: str, limit: int = 5) -> list[dict[str, Any]]:
-        return []
+        project = self.get_repo(owner, name)
+        findings = self._get_json_optional(
+            f"/projects/{quote(str(project['id']), safe='')}/vulnerability_findings",
+            params={"per_page": limit, "scope": "all"},
+            cache_key=self._cache_key("repo_vulnerability_findings", owner, name, str(limit)),
+            default=[],
+        )
+        if not isinstance(findings, list):
+            return []
+        advisories = []
+        for finding in findings[:limit]:
+            advisories.append(
+                {
+                    **finding,
+                    "summary": finding.get("name") or finding.get("title") or "vulnerability finding",
+                    "severity": finding.get("severity") or "unknown",
+                    "html_url": finding.get("blob_path") or finding.get("create_vulnerability_feedback_issue_path"),
+                }
+            )
+        return advisories
 
     def get_user_packages(self, username: str, package_type: str, limit: int = 5) -> list[dict[str, Any]]:
-        return []
+        if package_type == "container":
+            return []
+        group = self._get_json_optional(
+            f"/groups/{quote(username, safe='')}",
+            cache_key=self._cache_key("package_group_lookup", username),
+            default=None,
+        )
+        params = {"per_page": limit, "sort": "desc"}
+        if package_type:
+            params["package_type"] = package_type
+        if isinstance(group, dict):
+            packages = self._get_json_optional(
+                f"/groups/{quote(str(group['id']), safe='')}/packages",
+                params=params,
+                cache_key=self._cache_key("group_packages", username, package_type, str(limit)),
+                default=[],
+            )
+            return packages[:limit] if isinstance(packages, list) else []
+
+        rows: list[dict[str, Any]] = []
+        for repo in self.get_repos(username)[:8]:
+            project_id = repo.get("id")
+            if not project_id:
+                continue
+            packages = self._get_json_optional(
+                f"/projects/{quote(str(project_id), safe='')}/packages",
+                params=params,
+                cache_key=self._cache_key("project_packages", str(project_id), package_type, str(limit)),
+                default=[],
+            )
+            if isinstance(packages, list):
+                for package in packages:
+                    rows.append({**package, "project_path": repo.get("full_name")})
+                    if len(rows) >= limit:
+                        return rows
+        return rows
 
     def get_org(self, name: str) -> dict[str, Any]:
         group = self._get_json(f"/groups/{quote(name, safe='')}", cache_key=self._cache_key("org", name))
@@ -553,6 +650,7 @@ class GiteaClient(BaseProviderClient):
         "profile_readme",
         "top_repos",
         "releases",
+        "actions_status",
         "repo_health",
         "topics",
         "packages",
@@ -568,7 +666,6 @@ class GiteaClient(BaseProviderClient):
         "showcase": "Gitea-compatible APIs have no GitHub-style profile showcase API",
         "sponsors": "Gitea-compatible APIs have no matching sponsors listing API",
         "discussions": "Gitea-compatible APIs do not expose GitHub Discussions as a profile metric",
-        "actions_status": "Gitea-compatible Actions endpoints vary by host and are not stable enough for this provider layer",
         "dependencies": "Gitea-compatible APIs do not expose a public SBOM summary API",
         "security_advisories": "Gitea-compatible APIs do not expose repository advisory summaries as a public profile metric",
     }
@@ -788,7 +885,49 @@ class GiteaClient(BaseProviderClient):
         return releases[:limit] if isinstance(releases, list) else []
 
     def get_repo_workflow_runs(self, owner: str, name: str, limit: int = 1) -> list[dict[str, Any]]:
-        return []
+        if getattr(self, "_actions_unavailable", False):
+            return []
+        cache_key = self._cache_key("repo_actions_runs", owner, name, str(limit))
+        cached = self.cache.get(cache_key)
+        if cached is not None:
+            return cached
+        if self.offline:
+            return []
+        try:
+            response = self.session.get(
+                self._url(f"/repos/{quote(owner, safe='')}/{quote(name, safe='')}/actions/runs"),
+                params={"limit": min(max(limit, 1), 50)},
+                timeout=5,
+            )
+        except (requests.RequestException, ValueError):
+            self._actions_unavailable = True
+            return []
+        if response.status_code in {401, 403, 502, 503, 504}:
+            self._actions_unavailable = True
+            return []
+        if not response.ok:
+            return []
+        try:
+            payload = response.json()
+        except ValueError:
+            return []
+        if isinstance(payload, dict):
+            runs = payload.get("workflow_runs") or payload.get("runs") or []
+        elif isinstance(payload, list):
+            runs = payload
+        else:
+            runs = []
+        normalized = [
+            {
+                "name": run.get("name") or run.get("display_title") or f"run #{run.get('run_number') or run.get('id')}",
+                "status": run.get("status"),
+                "conclusion": run.get("conclusion") or run.get("status"),
+                "html_url": run.get("html_url") or run.get("url"),
+            }
+            for run in runs[:limit]
+        ]
+        self.cache.set(cache_key, normalized)
+        return normalized
 
     def get_repo_discussions_count(self, owner: str, name: str) -> int | None:
         return None
@@ -988,7 +1127,11 @@ class BitbucketClient(BaseProviderClient):
         "stats",
         "languages",
         "social_accounts",
+        "gists",
+        "recent_activity",
+        "profile_readme",
         "top_repos",
+        "releases",
         "actions_status",
         "repo_health",
         "topics",
@@ -999,19 +1142,15 @@ class BitbucketClient(BaseProviderClient):
         "contributions": "Bitbucket Cloud has no public profile contribution calendar API",
         "sparkline": "Bitbucket Cloud has no public profile contribution calendar API",
         "streaks": "Bitbucket Cloud has no public profile contribution calendar API",
-        "pull_requests": "Bitbucket Cloud pull request search is repository scoped, not profile scoped here",
+        "pull_requests": "Bitbucket Cloud pull request data is repository scoped, not profile scoped here",
         "issues": "Bitbucket Cloud issues are repository scoped and may be disabled per repo",
         "rate_limit": "Bitbucket Cloud does not expose a portable public rate-limit endpoint here",
         "pinned": "Bitbucket Cloud has no GitHub-style pinned profile items",
         "organizations": "Bitbucket targets are workspaces; use the org command for a workspace summary",
         "starred": "Bitbucket Cloud has no matching public starred-repositories API",
         "watched": "Bitbucket Cloud has no matching public watched-repositories API",
-        "gists": "Bitbucket Cloud has no gist/snippet equivalent in this provider layer",
-        "recent_activity": "Bitbucket Cloud has no public workspace activity feed API",
         "showcase": "Bitbucket Cloud has no GitHub-style profile showcase API",
         "sponsors": "Bitbucket Cloud has no matching sponsors listing API",
-        "profile_readme": "Bitbucket Cloud has no profile README convention",
-        "releases": "Bitbucket Cloud downloads/tags do not map cleanly to GitHub releases here",
         "discussions": "Bitbucket Cloud has no profile discussion metric API",
         "dependencies": "Bitbucket Cloud has no public SBOM summary API",
         "security_advisories": "Bitbucket Cloud has no public repository advisory summary API",
@@ -1057,11 +1196,12 @@ class BitbucketClient(BaseProviderClient):
         user = self.get_user(username)
         repos = filter_repos(self.get_repos(username, viewer_mode=False), repo_filters)
         user["public_repos"] = len(repos)
+        events = self._events_from_repos(username, repos, limit=30)
         return GitHubContext(
             target_user=username,
             user=user,
             repos=repos,
-            events=[],
+            events=events,
             viewer_mode=False,
             authenticated_login=None,
             graphql={},
@@ -1099,12 +1239,41 @@ class BitbucketClient(BaseProviderClient):
         return []
 
     def get_gists(self, username: str, limit: int) -> list[dict[str, Any]]:
-        return []
+        payload = self._get_json_optional(
+            f"/snippets/{username}",
+            params={"pagelen": min(max(limit, 1), 100), "sort": "-updated_on"},
+            cache_key=self._cache_key("snippets", username, str(limit)),
+            default={},
+        )
+        snippets = payload.get("values", []) if isinstance(payload, dict) else []
+        return [
+            {
+                "id": snippet.get("id"),
+                "description": snippet.get("title") or snippet.get("description") or "untitled snippet",
+                "html_url": ((snippet.get("links") or {}).get("html") or {}).get("href"),
+            }
+            for snippet in snippets[:limit]
+        ]
 
     def get_events(self, username: str, limit: int = 10) -> list[dict[str, Any]]:
-        return []
+        return self._events_from_repos(username, self.get_repos(username), limit=limit)
 
     def get_profile_readme(self, username: str) -> str | None:
+        repo = self._get_json_optional(
+            f"/repositories/{username}/{username}",
+            cache_key=self._cache_key("profile_repo", username),
+            default=None,
+        )
+        if not isinstance(repo, dict):
+            return None
+        branch = ((repo.get("mainbranch") or {}).get("name")) or "HEAD"
+        for name in ("README.md", "readme.md"):
+            content = self._get_text_optional(
+                f"/repositories/{username}/{username}/src/{quote(branch, safe='')}/{quote(name, safe='')}",
+                cache_key=self._cache_key("profile_readme", username, name, branch),
+            )
+            if content:
+                return content
         return None
 
     def get_repo(self, owner: str, name: str) -> dict[str, Any]:
@@ -1133,7 +1302,42 @@ class BitbucketClient(BaseProviderClient):
         return [self._normalize_commit(commit) for commit in commits[:limit]]
 
     def get_repo_releases(self, owner: str, name: str, limit: int = 3) -> list[dict[str, Any]]:
-        return []
+        downloads = self._get_json_optional(
+            f"/repositories/{owner}/{name}/downloads",
+            params={"pagelen": min(max(limit, 1), 100)},
+            cache_key=self._cache_key("repo_downloads", owner, name, str(limit)),
+            default={},
+        )
+        values = downloads.get("values", []) if isinstance(downloads, dict) else []
+        releases = [
+            {
+                "tag_name": item.get("name"),
+                "name": item.get("name"),
+                "html_url": ((item.get("links") or {}).get("self") or {}).get("href"),
+                "published_at": item.get("created_on"),
+                "created_at": item.get("created_on"),
+            }
+            for item in values[:limit]
+        ]
+        if releases:
+            return releases
+        tags = self._get_json_optional(
+            f"/repositories/{owner}/{name}/refs/tags",
+            params={"pagelen": min(max(limit, 1), 100), "sort": "-target.date"},
+            cache_key=self._cache_key("repo_tags", owner, name, str(limit)),
+            default={},
+        )
+        values = tags.get("values", []) if isinstance(tags, dict) else []
+        return [
+            {
+                "tag_name": tag.get("name"),
+                "name": tag.get("name"),
+                "html_url": ((tag.get("links") or {}).get("html") or {}).get("href"),
+                "published_at": (tag.get("target") or {}).get("date"),
+                "created_at": (tag.get("target") or {}).get("date"),
+            }
+            for tag in values[:limit]
+        ]
 
     def get_repo_workflow_runs(self, owner: str, name: str, limit: int = 1) -> list[dict[str, Any]]:
         pipelines = self._get_json_optional(
@@ -1187,6 +1391,23 @@ class BitbucketClient(BaseProviderClient):
 
     def get_rate_limit(self) -> dict[str, Any]:
         return {"rate": {"remaining": 0, "limit": 0}}
+
+    def _events_from_repos(self, username: str, repos: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = []
+        for repo in sorted(repos, key=lambda item: item.get("updated_at") or "", reverse=True)[:8]:
+            full_name = repo.get("full_name")
+            if not isinstance(full_name, str) or "/" not in full_name:
+                continue
+            rows.append(
+                {
+                    "type": "RepositoryEvent",
+                    "repo": {"name": full_name},
+                    "created_at": repo.get("updated_at"),
+                    "payload": {"commits": []},
+                }
+            )
+        rows.sort(key=lambda item: item.get("created_at") or "", reverse=True)
+        return rows[:limit]
 
     def _normalize_workspace(self, raw: dict[str, Any]) -> dict[str, Any]:
         links = raw.get("links") or {}
