@@ -27,14 +27,19 @@ class GitHubContext:
 
 
 class GitHubClient:
-    def __init__(self, token: str, cache: CacheStore, offline: bool = False) -> None:
+    provider_name = "github"
+    provider_title = "GitHub"
+
+    def __init__(self, token: str, cache: CacheStore, offline: bool = False, base_url: str = "https://api.github.com") -> None:
         self.token = token
         self.cache = cache
         self.offline = offline
+        self.base_url = base_url.rstrip("/")
         self.session = requests.Session()
         self.session.headers.update(
             {
                 "Accept": "application/vnd.github+json",
+                "X-GitHub-Api-Version": "2022-11-28",
                 "User-Agent": USER_AGENT,
             }
         )
@@ -74,7 +79,16 @@ class GitHubClient:
     def _cache_key(self, prefix: str, *parts: str) -> str:
         suffix = "|".join(parts)
         auth_scope = "auth" if self.token else "anon"
-        return f"{prefix}|{auth_scope}|{suffix}"
+        return f"{self.provider_name}|{self.base_url}|{prefix}|{auth_scope}|{suffix}"
+
+    def supports_module(self, name: str) -> bool:
+        return True
+
+    def unsupported_reason(self, name: str) -> str:
+        return ""
+
+    def module_token_required(self, name: str, default: bool) -> bool:
+        return default
 
     def _get_json(self, path: str, params: dict[str, Any] | None = None, cache_key: str | None = None) -> Any:
         if cache_key:
@@ -83,7 +97,7 @@ class GitHubClient:
                 return cached
         if self.offline:
             raise GitHubAPIError(f"offline mode: {path} not available in cache")
-        response = self.session.get(f"https://api.github.com{path}", params=params, timeout=20)
+        response = self.session.get(f"{self.base_url}{path}", params=params, timeout=20)
         if response.status_code == 404:
             raise GitHubAPIError("GitHub user or resource not found")
         if response.status_code == 401:
@@ -246,7 +260,7 @@ class GitHubClient:
         """
         try:
             response = self.session.post(
-                "https://api.github.com/graphql",
+                f"{self.base_url}/graphql",
                 json={"query": query, "variables": {"owner": owner, "name": name}},
                 timeout=20,
             )
