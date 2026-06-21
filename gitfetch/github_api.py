@@ -315,7 +315,7 @@ class GitHubClient:
         )
 
     def get_repo_languages(self, owner: str, name: str) -> dict[str, int]:
-        return self.get_languages(f"https://api.github.com/repos/{owner}/{name}/languages")
+        return self.get_languages(f"{self.base_url}/repos/{owner}/{name}/languages")
 
     def get_repo_contributors(self, owner: str, name: str, limit: int = 10) -> list[dict[str, Any]]:
         return self._paginate(

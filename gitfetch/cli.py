@@ -12,14 +12,17 @@ from gitfetch.config import (
     cache_dir,
     get_token,
     load_config,
+    normalize_config,
     preset_config,
     set_override,
     write_config,
     ConfigError,
+    SUPPORTED_PROVIDERS,
 )
 from gitfetch.github_api import GitHubAPIError, GitHubClient
 from gitfetch.modules import MODULE_HANDLERS, available_module_metadata, build_module_list, load_plugin_modules
 from gitfetch.modules.builtin import ModuleResult
+from gitfetch.providers import create_provider_client
 from gitfetch.render import render_output
 
 
@@ -27,6 +30,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Configurable GitHub profile fetch for the terminal")
     parser.add_argument("--version", action="version", version=f"gitfetch {__version__}")
     parser.add_argument("--user", help="GitHub username override")
+    parser.add_argument("--provider", choices=SUPPORTED_PROVIDERS, help="Git provider override")
+    parser.add_argument("--base-url", help="Provider API base URL override")
     parser.add_argument("--profile", help="Saved profile name from config.toml")
     parser.add_argument("--token", help="GitHub token override")
     parser.add_argument("--mode", choices=["public", "viewer"], help="Profile data mode override")
@@ -67,7 +72,8 @@ def build_parser() -> argparse.ArgumentParser:
     profiles_subparsers.add_parser("list", help="List saved profiles")
     profile_set = profiles_subparsers.add_parser("set", help="Create or update a saved profile")
     profile_set.add_argument("name")
-    profile_set.add_argument("--user", required=True, help="GitHub username for the profile")
+    profile_set.add_argument("--user", required=True, help="Provider username or workspace for the profile")
+    profile_set.add_argument("--provider", choices=SUPPORTED_PROVIDERS, default="github")
     profile_set.add_argument("--mode", choices=["public", "viewer"], default="public")
     profile_set.add_argument("--token-env", default="GITHUB_TOKEN")
     profile_set.add_argument("--token-command", default="")
@@ -178,7 +184,10 @@ def handle_config_command(args: argparse.Namespace) -> int:
 
 
 def run_config_wizard() -> dict:
-    username = input("GitHub username: ").strip()
+    provider = input("Provider [github/gitlab/bitbucket] (github): ").strip().lower() or "github"
+    if provider not in SUPPORTED_PROVIDERS:
+        raise ConfigError(f"unknown provider: {provider}")
+    username = input("Username/workspace: ").strip()
     preset = input("Preset [compact/minimal/full/showcase] (compact): ").strip() or "compact"
     if preset not in {"minimal", "compact", "full", "showcase"}:
         raise ConfigError(f"unknown preset: {preset}")
@@ -188,6 +197,7 @@ def run_config_wizard() -> dict:
         raise ConfigError(f"unsupported format: {output_format}")
     token_env = input("Token env var (GITHUB_TOKEN): ").strip() or "GITHUB_TOKEN"
     config = preset_config(preset)
+    config["profile"]["provider"] = provider
     config["profile"]["username"] = username
     config["profile"]["token_env"] = token_env
     config["display"]["avatar"] = avatar_raw not in {"n", "no", "false", "0"}
@@ -205,13 +215,15 @@ def handle_profiles_command(args: argparse.Namespace, path: Path) -> int:
         for name in sorted(profiles):
             profile = profiles[name]
             username = profile.get("username", "")
+            provider = profile.get("provider", "github")
             mode = profile.get("mode", "public")
             token_env = profile.get("token_env", "GITHUB_TOKEN")
             token_command = " token-command" if profile.get("token_command") else ""
-            print(f"{name:16} {username:20} {mode:6} {token_env}{token_command}")
+            print(f"{name:16} {provider:10} {username:20} {mode:6} {token_env}{token_command}")
         return 0
     if args.profiles_command == "set":
         profiles[args.name] = {
+            "provider": args.provider,
             "username": args.user,
             "mode": args.mode,
             "token_env": args.token_env,
@@ -335,6 +347,17 @@ def _token_required_result(name: str) -> ModuleResult:
     )
 
 
+def _unsupported_provider_result(name: str, client) -> ModuleResult:
+    title = name.replace("_", " ").title()
+    reason = client.unsupported_reason(name)
+    return ModuleResult(
+        name,
+        title,
+        [f"unsupported on {client.provider_title}: {reason}"],
+        {"unsupported": True, "provider": client.provider_name, "reason": reason},
+    )
+
+
 def handle_render_command(args: argparse.Namespace) -> int:
     if args.watch and args.save:
         raise ConfigError("--watch cannot be combined with --save")
@@ -348,6 +371,11 @@ def handle_render_command(args: argparse.Namespace) -> int:
         set_override(config, key, value)
     if args.user:
         config["profile"]["username"] = args.user
+    if args.provider:
+        config["profile"]["provider"] = args.provider
+    if args.base_url:
+        provider = config["profile"].get("provider", "github")
+        config.setdefault("providers", {}).setdefault(provider, {})["base_url"] = args.base_url
     if args.mode:
         config["profile"]["mode"] = args.mode
     if args.format:
@@ -368,6 +396,7 @@ def handle_render_command(args: argparse.Namespace) -> int:
         config["display"]["avatar_style"] = args.avatar_style
     if args.avatar_color:
         config["display"]["avatar_color"] = args.avatar_color
+    normalize_config(config)
     load_plugin_modules(config)
 
     username = config["profile"].get("username", "").strip()
@@ -383,7 +412,7 @@ def handle_render_command(args: argparse.Namespace) -> int:
         ttl_seconds=int(config["cache"]["ttl_seconds"]),
         bypass_read=bool(args.refresh),
     )
-    client = GitHubClient(token=token, cache=cache, offline=bool(args.offline))
+    client = create_provider_client(config, token=token, cache=cache, offline=bool(args.offline))
 
     def render_once() -> None:
         context = client.get_context(
@@ -394,7 +423,11 @@ def handle_render_command(args: argparse.Namespace) -> int:
         module_results = []
         metadata = available_module_metadata()
         for name in build_module_list(config):
-            if metadata.get(name, {}).get("token_required") and not token:
+            if not client.supports_module(name):
+                module_results.append(_unsupported_provider_result(name, client))
+                continue
+            token_required = client.module_token_required(name, metadata.get(name, {}).get("token_required", False))
+            if token_required and not token:
                 module_results.append(_token_required_result(name))
                 continue
             result = MODULE_HANDLERS[name](config, context, client)
