@@ -4,7 +4,7 @@
 
 # `Gitfetch` 🛻
 
-Serving you snapshots of your git provider profile in the [CLI](https://en.wikipedia.org/wiki/Command-line_interface).
+Serving you snapshots of your [Git Provider](https://git-scm.com/) profile in the [CLI](https://en.wikipedia.org/wiki/Command-line_interface).
 
 ## Stack
 
@@ -19,7 +19,7 @@ Serving you snapshots of your git provider profile in the [CLI](https://en.wikip
 
 ## Features
 
-- ASCII art avatar rendered from your provider profile picture
+- ASCII art avatar rendered from your Git Provider profile picture
 - Provider support for GitHub, GitLab, Bitbucket Cloud, Gitea, Forgejo, and Codeberg
 - Profile stats: hours since joining, public repos, followers, days since last commit
 - Top-5 language breakdown by repository bytes
@@ -130,8 +130,6 @@ Public optional modules include `social_accounts`, `organizations`, `starred`, `
 
 Token-backed optional modules include `contributions`, `sparkline`, `streaks`, `pull_requests`, `issues`, `pinned`, `showcase`, `sponsors`, `discussions`, `security_advisories`, and `contribution_breakdown`.
 
-Provider support is best-effort. GitHub remains the only provider with every GitHub-specific module. GitLab, Bitbucket, Gitea, Forgejo, and Codeberg render equivalent data where their public APIs expose it; unavailable modules print an explicit unsupported-provider message.
-
 ## Config
 
 `Gitfetch` reads `~/.config/gitfetch/config.toml` by default. You can use another file with `--config`.
@@ -198,7 +196,7 @@ Encountered an issue that isn't covered here? Open an issue or shoot me a messag
 
 ### A module says it requires a token 🔐
 
-Some provider data is only available through authenticated API calls. Pass `--token`, set `GITHUB_TOKEN`, `GITLAB_TOKEN`, `BITBUCKET_TOKEN`, `GITEA_TOKEN`, `FORGEJO_TOKEN`, or `CODEBERG_TOKEN`, configure `profile.token_env`, or use `profile.token_command`.
+Some Git Provider data is only available through authenticated API calls. Pass `--token`, set `GITHUB_TOKEN`, `GITLAB_TOKEN`, `BITBUCKET_TOKEN`, `GITEA_TOKEN`, `FORGEJO_TOKEN`, or `CODEBERG_TOKEN`, configure `profile.token_env`, or use `profile.token_command`.
 
 ```console
 $ export GITHUB_TOKEN=ghp_xxxx
