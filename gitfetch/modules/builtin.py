@@ -54,21 +54,26 @@ def module_identity(config: dict[str, Any], context: GitHubContext, client: GitH
 
 def module_stats(config: dict[str, Any], context: GitHubContext, client: GitHubClient) -> ModuleResult:
     user = context.user
-    created_at = datetime.fromisoformat(user["created_at"].replace("Z", "+00:00"))
-    age_hours = int((datetime.now(created_at.tzinfo) - created_at).total_seconds() / 3600)
+    provider_title = getattr(context, "provider_title", getattr(client, "provider_title", "GitHub"))
+    created_at = _parse_github_timestamp(user.get("created_at"))
+    age_hours = int((datetime.now(created_at.tzinfo) - created_at).total_seconds() / 3600) if created_at else None
     latest_repo_activity = None
     for repo in context.repos:
         pushed_at = repo.get("pushed_at")
         if pushed_at and (latest_repo_activity is None or pushed_at > latest_repo_activity):
             latest_repo_activity = pushed_at
     latest_public_event = context.events[0]["created_at"] if context.events else None
-    lines = [
-        f"{age_hours} hours since joining GitHub",
+    lines = []
+    if age_hours is not None:
+        lines.append(f"{age_hours} hours since joining {provider_title}")
+    else:
+        lines.append(f"join date unavailable on {provider_title}")
+    lines.extend([
         f"{user.get('public_repos', len(context.repos))} public repos",
         f"{user.get('public_gists', 0)} public gists",
         f"{user.get('followers', 0)} followers",
         f"{user.get('following', 0)} following",
-    ]
+    ])
     if latest_public_event:
         lines.append(f"last public activity: {format_relative_days(latest_public_event)}")
     elif latest_repo_activity:
@@ -615,7 +620,8 @@ def module_pull_requests(config: dict[str, Any], context: GitHubContext, client:
         f"closed: {closed_count}",
     ]
     data = {"open": open_count, "merged": merged_count, "closed": closed_count}
-    return ModuleResult("pull_requests", "Pull Requests", lines, data, requires_token=True)
+    title = "Merge Requests" if getattr(client, "provider_name", "") == "gitlab" else "Pull Requests"
+    return ModuleResult("pull_requests", title, lines, data, requires_token=True)
 
 
 def module_issues(config: dict[str, Any], context: GitHubContext, client: GitHubClient) -> ModuleResult:

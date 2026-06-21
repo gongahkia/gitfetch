@@ -13,12 +13,14 @@ from gitfetch.config import (
     config_path,
     get_token,
     load_config,
+    normalize_config,
     set_override,
     ConfigError,
 )
 from gitfetch.github_api import GitHubAPIError, GitHubClient
 from gitfetch.modules import MODULE_HANDLERS, available_module_metadata, build_module_list, load_plugin_modules
 from gitfetch.modules.builtin import ModuleResult
+from gitfetch.providers import create_provider_client
 from gitfetch.render import (
     SPLIT_GAP,
     apply_margin,
@@ -39,6 +41,11 @@ def _apply_common_overrides(args: argparse.Namespace, config: dict[str, Any]) ->
         set_override(config, key, value)
     if getattr(args, "format", None):
         config["display"]["format"] = args.format
+    if getattr(args, "provider", None):
+        config["profile"]["provider"] = args.provider
+    if getattr(args, "base_url", None):
+        provider = config["profile"].get("provider", "github")
+        config.setdefault("providers", {}).setdefault(provider, {})["base_url"] = args.base_url
     if getattr(args, "no_avatar", False):
         config["display"]["avatar"] = False
     if getattr(args, "margin", None) is not None:
@@ -55,6 +62,7 @@ def _apply_common_overrides(args: argparse.Namespace, config: dict[str, Any]) ->
         config["display"]["avatar_style"] = args.avatar_style
     if getattr(args, "avatar_color", None):
         config["display"]["avatar_color"] = args.avatar_color
+    normalize_config(config)
 
 
 def _load_config_with_path(args: argparse.Namespace) -> dict[str, Any]:
@@ -75,7 +83,7 @@ def _client_for(args: argparse.Namespace, config: dict[str, Any]) -> GitHubClien
         ttl_seconds=int(config["cache"]["ttl_seconds"]),
         bypass_read=bool(getattr(args, "refresh", False)),
     )
-    return GitHubClient(token=token, cache=cache, offline=bool(getattr(args, "offline", False)))
+    return create_provider_client(config, token=token, cache=cache, offline=bool(getattr(args, "offline", False)))
 
 
 def _render_with_lines(
@@ -209,6 +217,16 @@ def _token_required_result(name: str) -> ModuleResult:
     )
 
 
+def _unsupported_provider_result(name: str, client) -> ModuleResult:
+    reason = client.unsupported_reason(name)
+    return ModuleResult(
+        name,
+        name.replace("_", " ").title(),
+        [f"unsupported on {client.provider_title}: {reason}"],
+        {"unsupported": True, "provider": client.provider_name, "reason": reason},
+    )
+
+
 def _compare_metrics(ctx) -> dict[str, Any]:
     languages: dict[str, int] = {}
     for repo in ctx.repos:
@@ -323,10 +341,10 @@ def handle_repo_command(args: argparse.Namespace) -> int:
         args,
         kind="repository",
         title=repo.get("full_name") or args.target,
-        subtitle=repo.get("description") or "GitHub repository",
+        subtitle=repo.get("description") or f"{client.provider_title} repository",
         avatar_url=avatar_url,
         modules=modules,
-        extra={"target": args.target},
+        extra={"target": args.target, "provider": client.provider_name},
     )
     return 0
 
@@ -383,7 +401,7 @@ def handle_org_command(args: argparse.Namespace) -> int:
         subtitle=f"@{org.get('login', args.target)}",
         avatar_url=org.get("avatar_url"),
         modules=modules,
-        extra={"target": args.target},
+        extra={"target": args.target, "provider": client.provider_name},
     )
     return 0
 
@@ -428,7 +446,11 @@ def handle_compare_command(args: argparse.Namespace) -> int:
         modules: list[ModuleResult] = []
         for name in build_module_list(config):
             try:
-                if metadata.get(name, {}).get("token_required") and not client.token:
+                if not client.supports_module(name):
+                    modules.append(_unsupported_provider_result(name, client))
+                    continue
+                token_required = client.module_token_required(name, metadata.get(name, {}).get("token_required", False))
+                if token_required and not client.token:
                     modules.append(_token_required_result(name))
                     continue
                 result = MODULE_HANDLERS[name](config, ctx, client)
@@ -460,6 +482,7 @@ def handle_compare_command(args: argparse.Namespace) -> int:
     if output_format == "json":
         payload = {
             "type": "compare",
+            "provider": client.provider_name,
             "users": args.users,
             "summary": summary.data,
             "modules": {
@@ -490,11 +513,11 @@ def handle_compare_command(args: argparse.Namespace) -> int:
             config,
             args,
             kind="compare",
-            title="GitHub Compare",
+            title=f"{client.provider_title} Compare",
             subtitle=" vs ".join(args.users),
             avatar_url=None,
             modules=card_modules,
-            extra={"users": args.users},
+            extra={"users": args.users, "provider": client.provider_name},
         )
         return 0
 
