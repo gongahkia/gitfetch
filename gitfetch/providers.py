@@ -8,7 +8,7 @@ from urllib.parse import quote
 import requests
 
 from gitfetch.cache import CacheStore
-from gitfetch.config import ConfigError, SUPPORTED_PROVIDERS
+from gitfetch.config import ConfigError, MODULE_METADATA, SUPPORTED_PROVIDERS
 from gitfetch.github_api import GitHubAPIError, GitHubClient, GitHubContext, filter_repos
 
 
@@ -28,6 +28,8 @@ class BaseProviderClient:
         self.session.headers.update({"User-Agent": "gitfetch/2.0.0"})
 
     def supports_module(self, name: str) -> bool:
+        if name not in MODULE_METADATA:
+            return True
         return name in self.supported_modules
 
     def unsupported_reason(self, name: str) -> str:
@@ -103,7 +105,6 @@ class GitLabClient(BaseProviderClient):
         "streaks",
         "pull_requests",
         "issues",
-        "rate_limit",
         "social_accounts",
         "organizations",
         "starred",
@@ -121,6 +122,7 @@ class GitLabClient(BaseProviderClient):
     }
     unsupported_reasons = {
         "watched": "GitLab has no matching public watched-repositories API",
+        "rate_limit": "GitLab does not expose a portable public rate-limit endpoint here",
         "pinned": "GitLab does not expose GitHub-style pinned profile items",
         "showcase": "GitLab has no GitHub-style profile showcase API",
         "sponsors": "GitLab has no matching sponsors listing API",
@@ -240,12 +242,12 @@ class GitLabClient(BaseProviderClient):
 
     def get_events(self, username: str, limit: int = 10) -> list[dict[str, Any]]:
         user_id = username if str(username).isdigit() else str(self._resolve_user(username)["id"])
-        events = self._paginate(
+        events = self._get_json(
             f"/users/{user_id}/events",
             params={"per_page": min(max(limit, 1), 100)},
             cache_key=self._cache_key("events", user_id, str(limit)),
         )
-        return [self._normalize_event(event) for event in events[:limit]]
+        return [self._normalize_event(event) for event in events[:limit]] if isinstance(events, list) else []
 
     def get_social_accounts(self, username: str) -> list[dict[str, Any]]:
         user = self.get_user(username)
@@ -537,7 +539,6 @@ class BitbucketClient(BaseProviderClient):
         "identity",
         "stats",
         "languages",
-        "rate_limit",
         "social_accounts",
         "top_repos",
         "actions_status",
@@ -552,6 +553,7 @@ class BitbucketClient(BaseProviderClient):
         "streaks": "Bitbucket Cloud has no public profile contribution calendar API",
         "pull_requests": "Bitbucket Cloud pull request search is repository scoped, not profile scoped here",
         "issues": "Bitbucket Cloud issues are repository scoped and may be disabled per repo",
+        "rate_limit": "Bitbucket Cloud does not expose a portable public rate-limit endpoint here",
         "pinned": "Bitbucket Cloud has no GitHub-style pinned profile items",
         "organizations": "Bitbucket targets are workspaces; use the org command for a workspace summary",
         "starred": "Bitbucket Cloud has no matching public starred-repositories API",
@@ -674,11 +676,12 @@ class BitbucketClient(BaseProviderClient):
         return [{"login": login, "contributions": count} for login, count in counts.most_common(limit)]
 
     def get_repo_commits(self, owner: str, name: str, limit: int = 5) -> list[dict[str, Any]]:
-        commits = self._paginate(
+        payload = self._get_json(
             f"/repositories/{owner}/{name}/commits",
             params={"pagelen": min(max(limit, 1), 100)},
             cache_key=self._cache_key("repo_commits", owner, name, str(limit)),
         )
+        commits = payload.get("values", []) if isinstance(payload, dict) else []
         return [self._normalize_commit(commit) for commit in commits[:limit]]
 
     def get_repo_releases(self, owner: str, name: str, limit: int = 3) -> list[dict[str, Any]]:

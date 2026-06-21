@@ -19,11 +19,15 @@ class ConfigTests(unittest.TestCase):
             write_config(path, config)
             loaded = load_config(path)
             self.assertEqual(loaded["profile"]["username"], "octocat")
+            self.assertEqual(loaded["profile"]["provider"], "github")
+            self.assertIn("gitlab", loaded["providers"])
             self.assertFalse(loaded["display"]["avatar"])
 
     def test_set_override_coerces_values(self) -> None:
         config = preset_config("compact")
         set_override(config, "display.avatar", "false")
         set_override(config, "modules.languages.limit", "3")
+        set_override(config, "profile.provider", "gitlab")
         self.assertFalse(config["display"]["avatar"])
         self.assertEqual(config["modules"]["languages"]["limit"], 3)
+        self.assertEqual(config["profile"]["provider"], "gitlab")

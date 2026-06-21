@@ -3,7 +3,7 @@ from __future__ import annotations
 
 COMMANDS = ["config", "modules", "repo", "org", "compare", "completions", "token"]
 TOP_FLAGS = [
-    "--user", "--profile", "--token", "--mode", "--config", "--set", "--format",
+    "--user", "--provider", "--base-url", "--profile", "--token", "--mode", "--config", "--set", "--format",
     "--save", "--no-avatar", "--margin", "--color", "--no-color", "--theme",
     "--avatar-style", "--avatar-color", "--watch", "--refresh",
     "--offline", "--version", "--help",
@@ -20,6 +20,7 @@ THEME_VALUES = _theme_names()
 STYLE_VALUES = ["ascii", "halfblock", "braille"]
 COLOR_VALUES = ["auto", "none", "256", "truecolor"]
 MODE_VALUES = ["public", "viewer"]
+PROVIDER_VALUES = ["github", "gitlab", "bitbucket"]
 
 
 BASH = """\
@@ -31,6 +32,7 @@ _gitfetch_completions() {{
     opts="{flags}"
     case "$prev" in
         --format)        COMPREPLY=( $(compgen -W "{formats}" -- "$cur") ); return ;;
+        --provider)      COMPREPLY=( $(compgen -W "{providers}" -- "$cur") ); return ;;
         --theme)         COMPREPLY=( $(compgen -W "{themes}" -- "$cur") ); return ;;
         --avatar-style)  COMPREPLY=( $(compgen -W "{styles}" -- "$cur") ); return ;;
         --avatar-color)  COMPREPLY=( $(compgen -W "{colors}" -- "$cur") ); return ;;
@@ -54,6 +56,8 @@ _gitfetch() {{
     cmds=({commands_zsh})
     _arguments -C \\
         '--user[GitHub username]:user:' \\
+        '--provider[Git provider]:provider:({providers})' \\
+        '--base-url[Provider API base URL]:url:' \\
         '--profile[Saved profile name]:profile:' \\
         '--token[GitHub token]:token:' \\
         '--mode[Profile mode]:mode:({modes})' \\
@@ -84,6 +88,8 @@ compdef _gitfetch gitfetch
 FISH = """\
 complete -c gitfetch -n "__fish_use_subcommand" -a "{commands}"
 complete -c gitfetch -l user -x -d "GitHub username"
+complete -c gitfetch -l provider -x -a "{providers}" -d "Git provider"
+complete -c gitfetch -l base-url -x -d "Provider API base URL"
 complete -c gitfetch -l profile -x -d "Saved profile name"
 complete -c gitfetch -l token -x -d "GitHub token"
 complete -c gitfetch -l mode -x -a "{modes}" -d "Profile mode"
@@ -116,6 +122,7 @@ def script_for(shell: str) -> str:
         "styles": " ".join(STYLE_VALUES),
         "colors": " ".join(COLOR_VALUES),
         "modes": " ".join(MODE_VALUES),
+        "providers": " ".join(PROVIDER_VALUES),
     }
     if shell == "bash":
         return BASH.format(**payload)
