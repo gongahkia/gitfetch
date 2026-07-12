@@ -134,7 +134,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
             "enabled": True,
             "hide_if_empty": True,
             "limit": 5,
-            "workers": 8,
+            "workers": 4,
+            "max_repos": 40,
         },
         "contributions": {
             "enabled": True,
@@ -493,6 +494,12 @@ def normalize_config(config: dict[str, Any]) -> None:
     color_mode = config["display"].get("avatar_color", "auto")
     if color_mode not in {"auto", "none", "256", "truecolor"}:
         raise ConfigError(f"display.avatar_color '{color_mode}' must be auto, none, 256, or truecolor")
+    languages_config = modules["languages"]
+    for key, minimum in (("limit", 1), ("workers", 1), ("max_repos", 0)):
+        value = languages_config.get(key)
+        if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
+            raise ConfigError(f"modules.languages.{key} must be an integer greater than or equal to {minimum}")
+
     ttl_seconds = config["cache"].get("ttl_seconds")
     if isinstance(ttl_seconds, bool) or not isinstance(ttl_seconds, int) or ttl_seconds < 0:
         raise ConfigError("cache.ttl_seconds must be a non-negative integer")

@@ -45,6 +45,15 @@ class ModuleTests(unittest.TestCase):
             with self.assertRaises(ConfigError):
                 load_plugin_modules({"plugins": {"paths": [str(path)]}})
 
+    def test_languages_cap_remote_requests_and_disclose_sampling(self) -> None:
+        context = mock.Mock(repos=[{"languages_url": f"https://example/{index}"} for index in range(3)])
+        client = mock.Mock(language_breakdown_unit="bytes")
+        client.get_languages.return_value = {"Python": 1}
+        config = {"modules": {"languages": {"limit": 5, "workers": 1, "max_repos": 2}}}
+        result = module_languages(config, context, client)
+        self.assertEqual(client.get_languages.call_count, 2)
+        self.assertIn("sampled: 2/3 repos", result.lines)
+
     def test_bitbucket_languages_are_labelled_as_repository_counts(self) -> None:
         context = mock.Mock(repos=[{"languages_url": "bitbucket://language/Python"}])
         client = mock.Mock(language_breakdown_unit="repositories")

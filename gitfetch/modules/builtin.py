@@ -93,10 +93,13 @@ def module_stats(config: dict[str, Any], context: GitHubContext, client: GitHubC
 
 
 def module_languages(config: dict[str, Any], context: GitHubContext, client: GitHubClient) -> ModuleResult:
-    limit = config["modules"]["languages"].get("limit", 5)
-    workers = max(1, int(config["modules"]["languages"].get("workers", 8)))
+    settings = config["modules"]["languages"]
+    limit = settings.get("limit", 5)
+    workers = max(1, int(settings.get("workers", 4)))
+    max_repos = int(settings.get("max_repos", 40))
     totals: dict[str, int] = {}
-    urls = [repo.get("languages_url") for repo in context.repos if repo.get("languages_url")]
+    all_urls = [repo.get("languages_url") for repo in context.repos if repo.get("languages_url")]
+    urls = all_urls if max_repos == 0 else all_urls[:max_repos]
     if workers == 1 or len(urls) <= 1:
         language_payloads = [client.get_languages(url) for url in urls]
     else:
@@ -112,11 +115,17 @@ def module_languages(config: dict[str, Any], context: GitHubContext, client: Git
     if not total_bytes:
         return ModuleResult("languages", "Languages", [], {}, hidden=True)
     ranked = sorted(totals.items(), key=lambda item: item[1], reverse=True)[:limit]
+    sampled = len(urls) < len(all_urls)
+    sample_note = f"sampled: {len(urls)}/{len(all_urls)} repos" if sampled else ""
     if getattr(client, "language_breakdown_unit", "bytes") == "repositories":
         lines = [f"{language} {count} repo(s)" for language, count in ranked]
+        if sample_note:
+            lines.append(sample_note)
         data = [{"language": language, "repositories": count} for language, count in ranked]
         return ModuleResult("languages", "Languages (Repo Count)", lines, data)
     lines = [f"{language} {count * 100 // total_bytes}%" for language, count in ranked]
+    if sample_note:
+        lines.append(sample_note)
     data = [{"language": language, "bytes": count} for language, count in ranked]
     return ModuleResult("languages", "Languages", lines, data)
 
