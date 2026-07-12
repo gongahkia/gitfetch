@@ -1308,8 +1308,25 @@ class BitbucketClient(BaseProviderClient):
         return None
 
     def get_repo(self, owner: str, name: str) -> dict[str, Any]:
-        repo = self._get_json(f"/repositories/{owner}/{name}", cache_key=self._cache_key("repo", owner, name))
-        return self._normalize_repo(repo)
+        raw = self._get_json(f"/repositories/{owner}/{name}", cache_key=self._cache_key("repo", owner, name))
+        repo = self._normalize_repo(raw)
+        # Cloud exposes exact collection sizes for forks and watchers, but not
+        # as fields on the repository representation.
+        repo["forks_count"] = self._collection_size(owner, name, "forks")
+        watchers = self._collection_size(owner, name, "watchers")
+        repo["watchers_count"] = watchers
+        repo["subscribers_count"] = watchers
+        return repo
+
+    def _collection_size(self, owner: str, name: str, collection: str) -> int | None:
+        payload = self._get_json_optional(
+            f"/repositories/{owner}/{name}/{collection}",
+            params={"pagelen": 1},
+            cache_key=self._cache_key("repo_collection_size", owner, name, collection),
+            default=None,
+        )
+        size = payload.get("size") if isinstance(payload, dict) else None
+        return size if isinstance(size, int) else None
 
     def get_repo_languages(self, owner: str, name: str) -> dict[str, int]:
         repo = self.get_repo(owner, name)
