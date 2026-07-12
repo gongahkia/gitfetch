@@ -1,5 +1,7 @@
 import hashlib
 import json
+import os
+import tempfile
 import time
 from pathlib import Path
 from typing import Any
@@ -12,7 +14,13 @@ class CacheStore:
         self.ttl_seconds = ttl_seconds
         self.bypass_read = bypass_read
         if self.enabled:
-            self.directory.mkdir(parents=True, exist_ok=True)
+            self.directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+            # Caches may contain private API responses.  Tighten permissions for
+            # directories created by older releases as well.
+            try:
+                self.directory.chmod(0o700)
+            except OSError:
+                pass
 
     def _path_for(self, key: str) -> Path:
         digest = hashlib.sha256(key.encode("utf-8")).hexdigest()
@@ -41,5 +49,23 @@ class CacheStore:
             "value": value,
         }
         path = self._path_for(key)
-        path.write_text(json.dumps(payload, ensure_ascii=True, indent=2), encoding="utf-8")
+        temporary_path: str | None = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                "w",
+                encoding="utf-8",
+                dir=self.directory,
+                prefix=f".{path.name}.",
+                delete=False,
+            ) as temporary:
+                temporary.write(json.dumps(payload, ensure_ascii=True, indent=2))
+                temporary_path = temporary.name
+            os.chmod(temporary_path, 0o600)
+            os.replace(temporary_path, path)
+        finally:
+            if temporary_path:
+                try:
+                    os.unlink(temporary_path)
+                except FileNotFoundError:
+                    pass
         return value

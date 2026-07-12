@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -40,7 +41,7 @@ class BaseProviderClient:
         return name in self.token_required_modules
 
     def _cache_key(self, prefix: str, *parts: str) -> str:
-        auth_scope = "auth" if self.token else "anon"
+        auth_scope = f"token:{hashlib.sha256(self.token.encode('utf-8')).hexdigest()[:16]}" if self.token else "anon"
         suffix = "|".join(str(part) for part in parts)
         return f"{self.provider_name}|{self.base_url}|{prefix}|{auth_scope}|{suffix}"
 

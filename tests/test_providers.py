@@ -27,6 +27,12 @@ class ProviderTests(unittest.TestCase):
         bitbucket = BitbucketClient("", _cache(), False, "https://api.bitbucket.org/2.0")
         self.assertNotEqual(gitlab._cache_key("user", "alice"), bitbucket._cache_key("user", "alice"))
 
+    def test_authenticated_cache_keys_are_token_scoped(self) -> None:
+        first = GitLabClient("first-token", _cache(), False, "https://gitlab.com/api/v4")
+        second = GitLabClient("second-token", _cache(), False, "https://gitlab.com/api/v4")
+        self.assertNotEqual(first._cache_key("viewer", "self"), second._cache_key("viewer", "self"))
+        self.assertNotIn("first-token", first._cache_key("viewer", "self"))
+
     def test_gitlab_project_normalization_matches_module_shape(self) -> None:
         client = GitLabClient("", _cache(), False, "https://gitlab.com/api/v4")
         project = client._normalize_project(
