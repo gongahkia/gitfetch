@@ -11,26 +11,39 @@ from gitfetch.modules.builtin import MODULE_HANDLERS, ModuleResult
 
 
 PLUGIN_METADATA: dict[str, dict[str, Any]] = {}
-_LOADED_PATHS: set[Path] = set()
+_PLUGIN_NAMES: set[str] = set()
+_BUILTIN_MODULE_NAMES = frozenset(MODULE_HANDLERS)
 
 
 PluginHandler = Callable[[dict[str, Any], GitHubContext, GitHubClient], ModuleResult | dict[str, Any] | list[str]]
 
 
+def reset_plugin_modules() -> None:
+    """Remove handlers registered for a previous in-process invocation."""
+    for name in _PLUGIN_NAMES:
+        MODULE_HANDLERS.pop(name, None)
+    _PLUGIN_NAMES.clear()
+    PLUGIN_METADATA.clear()
+
+
 def load_plugin_modules(config: dict[str, Any]) -> None:
+    # CLI tests and SDK-style callers can invoke gitfetch more than once in
+    # one process.  Plugins are config-scoped, not process-scoped.
+    reset_plugin_modules()
     plugins = config.get("plugins", {}) or {}
+    loaded_paths: set[Path] = set()
     for raw_path in plugins.get("paths", []) or []:
         path = Path(str(raw_path)).expanduser()
         if not path.is_absolute():
             path = Path.cwd() / path
         path = path.resolve()
-        if path in _LOADED_PATHS:
+        if path in loaded_paths:
             continue
         if not path.exists():
             raise ConfigError(f"plugin path does not exist: {path}")
         module = _load_module_from_path(path)
         _register_from_module(module, path)
-        _LOADED_PATHS.add(path)
+        loaded_paths.add(path)
 
 
 def _load_module_from_path(path: Path) -> ModuleType:
@@ -56,6 +69,10 @@ def _register_from_module(module: ModuleType, path: Path) -> None:
     for name, payload in registry.items():
         if not isinstance(name, str) or not name:
             raise ConfigError(f"plugin {path} registered an invalid module name")
+        if name in _BUILTIN_MODULE_NAMES:
+            raise ConfigError(f"plugin {path} cannot replace built-in module '{name}'")
+        if name in _PLUGIN_NAMES:
+            raise ConfigError(f"plugin {path} registered duplicate module '{name}'")
         handler: PluginHandler
         description = f"Plugin module from {path.name}."
         token_required = False
@@ -71,6 +88,7 @@ def _register_from_module(module: ModuleType, path: Path) -> None:
             raise ConfigError(f"plugin {path} module '{name}' has no callable handler")
         handler = raw_handler
         MODULE_HANDLERS[name] = _wrap_handler(name, title, handler)
+        _PLUGIN_NAMES.add(name)
         PLUGIN_METADATA[name] = {
             "token_required": token_required,
             "description": description,

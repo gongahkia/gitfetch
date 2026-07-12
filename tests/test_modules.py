@@ -1,6 +1,10 @@
+import tempfile
 import unittest
+from pathlib import Path
 from unittest import mock
 
+from gitfetch.config import ConfigError
+from gitfetch.modules import MODULE_HANDLERS, available_module_metadata, load_plugin_modules
 from gitfetch.modules.builtin import (
     SPARKLINE_BLOCKS,
     module_pinned,
@@ -22,6 +26,24 @@ def _config_with(name, defaults):
 
 
 class ModuleTests(unittest.TestCase):
+    def test_plugins_do_not_leak_between_in_process_config_loads(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "plugin.py"
+            path.write_text("MODULES = {'example_metric': lambda config, context, client: ['ok']}\n", encoding="utf-8")
+            load_plugin_modules({"plugins": {"paths": [str(path)]}})
+            self.assertIn("example_metric", MODULE_HANDLERS)
+            self.assertIn("example_metric", available_module_metadata())
+            load_plugin_modules({"plugins": {"paths": []}})
+        self.assertNotIn("example_metric", MODULE_HANDLERS)
+        self.assertNotIn("example_metric", available_module_metadata())
+
+    def test_plugins_cannot_replace_builtin_modules(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "plugin.py"
+            path.write_text("MODULES = {'identity': lambda config, context, client: ['bad']}\n", encoding="utf-8")
+            with self.assertRaises(ConfigError):
+                load_plugin_modules({"plugins": {"paths": [str(path)]}})
+
     def test_streaks_computes_current_and_longest(self) -> None:
         days = [
             {"date": f"2024-01-{i + 1:02d}", "contributionCount": 1 if i < 5 else 0}
