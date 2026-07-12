@@ -100,17 +100,19 @@ def module_languages(config: dict[str, Any], context: GitHubContext, client: Git
     totals: dict[str, int] = {}
     all_urls = [repo.get("languages_url") for repo in context.repos if repo.get("languages_url")]
     urls = all_urls if max_repos == 0 else all_urls[:max_repos]
+
+    def add_payload(payload: dict[str, int]) -> None:
+        for language, bytes_count in payload.items():
+            totals[language] = totals.get(language, 0) + int(bytes_count)
+
     if workers == 1 or len(urls) <= 1:
-        language_payloads = [client.get_languages(url) for url in urls]
+        for url in urls:
+            add_payload(client.get_languages(url))
     else:
-        language_payloads = []
         with ThreadPoolExecutor(max_workers=min(workers, len(urls))) as executor:
             futures = [executor.submit(client.get_languages, url) for url in urls]
             for future in as_completed(futures):
-                language_payloads.append(future.result())
-    for payload in language_payloads:
-        for language, bytes_count in payload.items():
-            totals[language] = totals.get(language, 0) + int(bytes_count)
+                add_payload(future.result())
     total_bytes = sum(totals.values())
     if not total_bytes:
         return ModuleResult("languages", "Languages", [], {}, hidden=True)
