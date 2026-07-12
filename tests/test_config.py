@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from gitfetch.config import load_config, preset_config, set_override, write_config
+from gitfetch.config import ConfigError, load_config, preset_config, set_override, write_config
 
 
 class ConfigTests(unittest.TestCase):
@@ -22,6 +22,13 @@ class ConfigTests(unittest.TestCase):
             self.assertEqual(loaded["profile"]["provider"], "github")
             self.assertIn("gitlab", loaded["providers"])
             self.assertFalse(loaded["display"]["avatar"])
+
+    def test_invalid_config_types_raise_config_error(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "config.toml"
+            path.write_text("[cache]\nttl_seconds = 'never'\n", encoding="utf-8")
+            with self.assertRaisesRegex(ConfigError, "cache.ttl_seconds"):
+                load_config(path)
 
     def test_set_override_coerces_values(self) -> None:
         config = preset_config("compact")
