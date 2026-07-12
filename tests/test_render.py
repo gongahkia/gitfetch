@@ -71,6 +71,17 @@ class RenderTests(unittest.TestCase):
         self.assertIn("@octocat", rendered)
         self.assertIn("Python", rendered)
 
+    def test_card_truncates_long_text_and_keeps_language_pills_in_bounds(self) -> None:
+        config = self._visual_config()
+        config["display"]["card_width"] = 180
+        long = "x" * 500
+        modules = [
+            ModuleResult(name="languages", title="Languages", lines=[], data=[{"language": long}]),
+        ]
+        rendered = render_output(config, {"login": long, "name": long, "bio": long}, modules, "card")
+        self.assertNotIn(long, rendered)
+        self.assertIn("…", rendered)
+
     def test_render_card_png_writes_file(self) -> None:
         config = self._visual_config()
         modules = [ModuleResult(name="languages", title="Languages", lines=["Python 90%"], data=[])]
