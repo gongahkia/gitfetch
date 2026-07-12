@@ -75,7 +75,7 @@ $ gitfetch repo octocat/Hello-World # render a repository profile
 $ gitfetch org github # render an organization profile
 $ gitfetch compare octocat torvalds # compare two or more users side-by-side
 $ gitfetch --provider gitlab repo gitlab-org/gitlab # render a GitLab project
-$ gitfetch --provider bitbucket repo atlassian/python-bitbucket # render a Bitbucket repository
+$ gitfetch --provider bitbucket repo atlassian/atlassian-event # render a Bitbucket repository
 $ gitfetch --provider codeberg repo forgejo/forgejo # render a Codeberg repository
 $ gitfetch --provider gitea repo gitea/tea # render a Gitea.com repository
 $ gitfetch --format json --user octocat # machine-readable output

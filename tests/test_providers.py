@@ -102,6 +102,16 @@ class ProviderTests(unittest.TestCase):
         self.assertFalse(client.supports_module("contributions"))
         self.assertTrue(client.supports_module("custom_plugin_metric"))
 
+    def test_bitbucket_repo_fetches_exact_fork_and_watcher_counts(self) -> None:
+        client = BitbucketClient("", _cache(), False, "https://api.bitbucket.org/2.0")
+        raw = {"slug": "repo", "full_name": "workspace/repo", "links": {}, "workspace": {"slug": "workspace"}}
+        with mock.patch.object(client, "_get_json", return_value=raw), mock.patch.object(
+            client, "_get_json_optional", side_effect=[{"size": 4}, {"size": 9}]
+        ):
+            repo = client.get_repo("workspace", "repo")
+        self.assertEqual(repo["forks_count"], 4)
+        self.assertEqual(repo["watchers_count"], 9)
+
     def test_bitbucket_snippets_map_to_gists(self) -> None:
         client = BitbucketClient("", _cache(), False, "https://api.bitbucket.org/2.0")
         with mock.patch.object(
