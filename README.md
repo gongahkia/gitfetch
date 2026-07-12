@@ -30,8 +30,8 @@ Serving you snapshots of your [Git Provider](https://git-scm.com/) profile in th
 - Terminal themes, margins, color controls, and split or stacked layouts
 - Avatar styles: `ascii`, `halfblock`, and `braille`
 - Output formats: `ansi`, `plain`, `json`, `svg`, `card`, and `png`
-- Repository mode with repository stats, language breakdown, contributors, and recent commits
-- Organization mode with organization stats, top repositories, and public members
+- Repository mode with provider-available repository stats, language data, contributors, and recent commits
+- Organization mode with organization stats, repositories, and public members
 - Compare mode with side-by-side profiles, rankings, language overlap, and metric summaries
 - Cache, refresh, watch, and offline modes
 - Bash, Zsh, and Fish shell completions

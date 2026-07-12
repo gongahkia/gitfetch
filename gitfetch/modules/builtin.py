@@ -68,12 +68,11 @@ def module_stats(config: dict[str, Any], context: GitHubContext, client: GitHubC
         lines.append(f"{age_hours} hours since joining {provider_title}")
     else:
         lines.append(f"join date unavailable on {provider_title}")
-    lines.extend([
-        f"{user.get('public_repos', len(context.repos))} public repos",
-        f"{user.get('public_gists', 0)} public gists",
-        f"{user.get('followers', 0)} followers",
-        f"{user.get('following', 0)} following",
-    ])
+    lines.append(f"{user.get('public_repos', len(context.repos))} public repos")
+    for field, label in (("public_gists", "public gists"), ("followers", "followers"), ("following", "following")):
+        value = user.get(field)
+        if value is not None:
+            lines.append(f"{value} {label}")
     if latest_public_event:
         relative = format_relative_days(latest_public_event)
         if relative:
@@ -170,7 +169,8 @@ def _repo_lines(items: list[dict[str, Any]], limit: int, include_owner: bool = T
         name = item.get("full_name") if include_owner else item.get("name")
         stars = item.get("stargazers_count")
         language = item.get("language") or item.get("primary_language") or "n/a"
-        lines.append(f"{name} ({language}, {stars} stars)")
+        star_text = f"{stars} stars" if stars is not None else "stars unavailable"
+        lines.append(f"{name} ({language}, {star_text})")
         data.append(
             {
                 "name": name,
