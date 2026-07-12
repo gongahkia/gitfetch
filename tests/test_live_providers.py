@@ -74,3 +74,25 @@ class LiveProviderSmokeTests(unittest.TestCase):
             context = client.get_context(username, "viewer", config["repo_filters"], include_graphql=False)
         self.assertTrue(context.viewer_mode)
         self.assertEqual(context.authenticated_login.lower(), username.lower())
+
+    def test_bitbucket_authenticated_workspace_context(self) -> None:
+        token = os.environ.get("GITFETCH_LIVE_BITBUCKET_TOKEN")
+        workspace = os.environ.get("GITFETCH_LIVE_BITBUCKET_USER")
+        auth_username = os.environ.get("GITFETCH_LIVE_BITBUCKET_AUTH_USERNAME")
+        if not token or not workspace or not auth_username:
+            self.skipTest("set Bitbucket token, workspace, and Basic-auth username variables")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config = preset_config("minimal")
+            config["profile"]["provider"] = "bitbucket"
+            config["providers"]["bitbucket"]["auth_mode"] = os.environ.get(
+                "GITFETCH_LIVE_BITBUCKET_AUTH_MODE", "basic"
+            )
+            config["providers"]["bitbucket"]["auth_username"] = auth_username
+            client = create_provider_client(
+                config,
+                token=token,
+                cache=CacheStore(Path(tmpdir), enabled=False, ttl_seconds=0),
+            )
+            context = client.get_context(workspace, "public", config["repo_filters"], include_graphql=False)
+        self.assertEqual(context.user.get("login"), workspace)
+        self.assertIsInstance(context.repos, list)
