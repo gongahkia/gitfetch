@@ -31,7 +31,7 @@ class ModuleTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "plugin.py"
             path.write_text("MODULES = {'example_metric': lambda config, context, client: ['ok']}\n", encoding="utf-8")
-            load_plugin_modules({"plugins": {"paths": [str(path)]}})
+            load_plugin_modules({"plugins": {"paths": [str(path)], "allow_unsafe": True}})
             self.assertIn("example_metric", MODULE_HANDLERS)
             self.assertIn("example_metric", available_module_metadata())
             load_plugin_modules({"plugins": {"paths": []}})
@@ -43,6 +43,13 @@ class ModuleTests(unittest.TestCase):
             path = Path(tmpdir) / "plugin.py"
             path.write_text("MODULES = {'identity': lambda config, context, client: ['bad']}\n", encoding="utf-8")
             with self.assertRaises(ConfigError):
+                load_plugin_modules({"plugins": {"paths": [str(path)], "allow_unsafe": True}})
+
+    def test_plugins_require_explicit_unsafe_opt_in(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "plugin.py"
+            path.write_text("MODULES = {}\n", encoding="utf-8")
+            with self.assertRaisesRegex(ConfigError, "allow_unsafe"):
                 load_plugin_modules({"plugins": {"paths": [str(path)]}})
 
     def test_languages_cap_remote_requests_and_disclose_sampling(self) -> None:

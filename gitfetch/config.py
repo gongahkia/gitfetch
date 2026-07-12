@@ -97,6 +97,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "plugins": {
         "paths": [],
         "modules": [],
+        "allow_unsafe": False,
     },
     "cache": {
         "enabled": True,

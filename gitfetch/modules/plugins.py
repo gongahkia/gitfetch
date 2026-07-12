@@ -31,8 +31,11 @@ def load_plugin_modules(config: dict[str, Any]) -> None:
     # one process.  Plugins are config-scoped, not process-scoped.
     reset_plugin_modules()
     plugins = config.get("plugins", {}) or {}
+    paths = plugins.get("paths", []) or []
+    if paths and not plugins.get("allow_unsafe", False):
+        raise ConfigError("local plugins execute arbitrary code; set plugins.allow_unsafe=true to enable them")
     loaded_paths: set[Path] = set()
-    for raw_path in plugins.get("paths", []) or []:
+    for raw_path in paths:
         path = Path(str(raw_path)).expanduser()
         if not path.is_absolute():
             path = Path.cwd() / path
@@ -97,7 +100,10 @@ def _register_from_module(module: ModuleType, path: Path) -> None:
 
 def _wrap_handler(name: str, title: str, handler: PluginHandler):
     def wrapped(config: dict[str, Any], context: GitHubContext, client: GitHubClient) -> ModuleResult:
-        result = handler(config, context, client)
+        try:
+            result = handler(config, context, client)
+        except Exception as exc:
+            return ModuleResult(name, title, [f"plugin failed: {exc}"], {"error": str(exc)})
         if isinstance(result, ModuleResult):
             return result
         if isinstance(result, list):
