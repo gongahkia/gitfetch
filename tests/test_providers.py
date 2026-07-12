@@ -102,6 +102,14 @@ class ProviderTests(unittest.TestCase):
         self.assertFalse(client.supports_module("contributions"))
         self.assertTrue(client.supports_module("custom_plugin_metric"))
 
+    def test_provider_does_not_present_non_equivalent_profile_metrics_as_exact(self) -> None:
+        gitlab = GitLabClient("", _cache(), False, "https://gitlab.com/api/v4")
+        gitea = GiteaClient("", _cache(), False, "https://gitea.com/api/v1")
+        self.assertFalse(gitlab.supports_module("contributions"))
+        self.assertFalse(gitlab.supports_module("pull_requests"))
+        self.assertFalse(gitea.supports_module("pull_requests"))
+        self.assertFalse(gitea.supports_module("contribution_breakdown"))
+
     def test_bitbucket_repo_fetches_exact_fork_and_watcher_counts(self) -> None:
         client = BitbucketClient("", _cache(), False, "https://api.bitbucket.org/2.0")
         raw = {"slug": "repo", "full_name": "workspace/repo", "links": {}, "workspace": {"slug": "workspace"}}
