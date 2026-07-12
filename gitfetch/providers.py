@@ -196,26 +196,6 @@ class GitLabClient(BaseProviderClient):
             self.cache.set(cache_key, items)
         return items
 
-    def _count_list(self, path: str, params: dict[str, Any]) -> int:
-        merged = dict(params)
-        merged["per_page"] = 1
-        if self.offline:
-            return 0
-        try:
-            response = self.session.get(self._url(path), params=merged, timeout=20)
-        except requests.RequestException:
-            return 0
-        if not response.ok:
-            return 0
-        total = response.headers.get("X-Total")
-        if total and total.isdigit():
-            return int(total)
-        try:
-            payload = response.json()
-        except ValueError:
-            return 0
-        return len(payload) if isinstance(payload, list) else 0
-
     def _resolve_user(self, username: str) -> dict[str, Any]:
         users = self._get_json(
             "/users",
@@ -541,31 +521,6 @@ class GitLabClient(BaseProviderClient):
     def get_rate_limit(self) -> dict[str, Any]:
         return {"rate": {"remaining": 0, "limit": 0}}
 
-    def _graphql_like_bundle(self, user_id: int, events: list[dict[str, Any]]) -> dict[str, Any]:
-        opened_mrs = self._count_list("/merge_requests", {"author_id": user_id, "state": "opened", "scope": "all"})
-        merged_mrs = self._count_list("/merge_requests", {"author_id": user_id, "state": "merged", "scope": "all"})
-        closed_mrs = self._count_list("/merge_requests", {"author_id": user_id, "state": "closed", "scope": "all"})
-        opened_issues = self._count_list("/issues", {"author_id": user_id, "state": "opened", "scope": "all"})
-        closed_issues = self._count_list("/issues", {"author_id": user_id, "state": "closed", "scope": "all"})
-        days = _contribution_days_from_events(events)
-        return {
-            "contributionsCollection": {
-                "totalCommitContributions": sum(len((event.get("payload") or {}).get("commits") or []) for event in events),
-                "totalIssueContributions": opened_issues + closed_issues,
-                "totalPullRequestContributions": opened_mrs + merged_mrs + closed_mrs,
-                "totalPullRequestReviewContributions": 0,
-                "contributionCalendar": {
-                    "totalContributions": sum(day["contributionCount"] for week in days for day in week["contributionDays"]),
-                    "weeks": days,
-                },
-            },
-            "openPRs": {"totalCount": opened_mrs},
-            "mergedPRs": {"totalCount": merged_mrs},
-            "closedPRs": {"totalCount": closed_mrs},
-            "openIssues": {"totalCount": opened_issues},
-            "closedIssues": {"totalCount": closed_issues},
-        }
-
     def _get_project_optional(self, owner: str, name: str) -> dict[str, Any] | None:
         payload = self._get_json_optional(
             f"/projects/{quote(owner + '/' + name, safe='')}",
@@ -740,26 +695,6 @@ class GiteaClient(BaseProviderClient):
         if cache_key:
             self.cache.set(cache_key, items)
         return items
-
-    def _count_list(self, path: str, params: dict[str, Any]) -> int:
-        if self.offline:
-            return 0
-        merged = dict(params)
-        merged["limit"] = 1
-        try:
-            response = self.session.get(self._url(path), params=merged, timeout=20)
-        except requests.RequestException:
-            return 0
-        if not response.ok:
-            return 0
-        total = response.headers.get("X-Total-Count")
-        if total and total.isdigit():
-            return int(total)
-        try:
-            payload = response.json()
-        except ValueError:
-            return 0
-        return len(payload) if isinstance(payload, list) else 0
 
     def get_context(self, username: str, mode: str, repo_filters: dict[str, Any]) -> GitHubContext:
         user = self.get_user(username)
@@ -1516,34 +1451,6 @@ class BitbucketClient(BaseProviderClient):
                 "author": {"name": user.get("display_name") or author.get("raw") or "?"},
             },
         }
-
-
-def _contribution_days_from_events(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    today = datetime.now(timezone.utc).date()
-    start = today - timedelta(days=83)
-    counts: Counter[str] = Counter()
-    for event in events:
-        created = event.get("created_at")
-        if not created:
-            continue
-        try:
-            day = datetime.fromisoformat(str(created).replace("Z", "+00:00")).date()
-        except ValueError:
-            continue
-        if start <= day <= today:
-            counts[day.isoformat()] += 1
-    weeks: list[dict[str, Any]] = []
-    cursor = start
-    while cursor <= today:
-        week_days = []
-        for _ in range(7):
-            if cursor > today:
-                break
-            iso = cursor.isoformat()
-            week_days.append({"date": iso, "contributionCount": counts[iso]})
-            cursor += timedelta(days=1)
-        weeks.append({"contributionDays": week_days})
-    return weeks
 
 
 def _contribution_days_from_heatmap(points: list[dict[str, Any]]) -> list[dict[str, Any]]:
