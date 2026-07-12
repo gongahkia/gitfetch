@@ -30,6 +30,13 @@ class ConfigTests(unittest.TestCase):
             with self.assertRaisesRegex(ConfigError, "cache.ttl_seconds"):
                 load_config(path)
 
+    def test_all_builtin_module_setting_types_are_validated(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "config.toml"
+            path.write_text("[modules.releases]\nlimit = 'five'\n", encoding="utf-8")
+            with self.assertRaisesRegex(ConfigError, "config.modules.releases.limit"):
+                load_config(path)
+
     def test_set_override_coerces_values(self) -> None:
         config = preset_config("compact")
         set_override(config, "display.avatar", "false")
