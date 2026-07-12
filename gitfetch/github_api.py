@@ -1,4 +1,5 @@
 import base64
+import hashlib
 import time
 from dataclasses import dataclass
 from typing import Any
@@ -78,7 +79,7 @@ class GitHubClient:
 
     def _cache_key(self, prefix: str, *parts: str) -> str:
         suffix = "|".join(parts)
-        auth_scope = "auth" if self.token else "anon"
+        auth_scope = f"token:{hashlib.sha256(self.token.encode('utf-8')).hexdigest()[:16]}" if self.token else "anon"
         return f"{self.provider_name}|{self.base_url}|{prefix}|{auth_scope}|{suffix}"
 
     def supports_module(self, name: str) -> bool:
