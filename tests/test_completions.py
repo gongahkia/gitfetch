@@ -17,11 +17,21 @@ class CompletionsTests(unittest.TestCase):
         out = script_for("zsh")
         self.assertIn("#compdef gitfetch", out)
         self.assertIn("compdef _gitfetch gitfetch", out)
+        self.assertIn("profile command", out)
+        self.assertIn("token command", out)
 
     def test_fish_script_uses_complete(self) -> None:
         out = script_for("fish")
         self.assertIn("complete -c gitfetch", out)
         self.assertIn("ansi plain json svg card", out)
+        self.assertIn("contributors-limit", out)
+        self.assertIn("token-command", out)
+
+    def test_bash_completion_includes_nested_commands(self) -> None:
+        out = script_for("bash")
+        self.assertIn("init wizard path validate profiles", out)
+        self.assertIn("store get status delete", out)
+        self.assertIn("--contributors-limit", out)
 
     def test_bash_script_has_valid_syntax(self) -> None:
         bash = shutil.which("bash")
