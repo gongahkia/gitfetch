@@ -125,11 +125,6 @@ class GitLabClient(BaseProviderClient):
         "identity",
         "stats",
         "languages",
-        "contributions",
-        "sparkline",
-        "streaks",
-        "pull_requests",
-        "issues",
         "social_accounts",
         "organizations",
         "starred",
@@ -144,12 +139,17 @@ class GitLabClient(BaseProviderClient):
         "dependencies",
         "security_advisories",
         "packages",
-        "contribution_breakdown",
-        "commit_cadence",
         "maintainer_activity",
     }
     token_required_modules = {"dependencies", "security_advisories"}
     unsupported_reasons = {
+        "contributions": "GitLab does not expose a stable public user contribution-calendar API",
+        "sparkline": "GitLab does not expose a stable public user contribution-calendar API",
+        "streaks": "GitLab does not expose a stable public user contribution-calendar API",
+        "pull_requests": "GitLab profile-wide merge-request totals are not equivalent to the profile contribution model",
+        "issues": "GitLab profile-wide issue totals are not equivalent to the profile contribution model",
+        "contribution_breakdown": "GitLab does not expose a stable public user contribution breakdown API",
+        "commit_cadence": "GitLab does not expose a stable public user contribution-calendar API",
         "watched": "GitLab has no matching public watched-repositories API",
         "rate_limit": "GitLab does not expose a portable public rate-limit endpoint here",
         "pinned": "GitLab does not expose GitHub-style pinned profile items",
@@ -248,8 +248,10 @@ class GitLabClient(BaseProviderClient):
             is_group = False
         repos = filter_repos(self.get_repos(username, viewer_mode=False), repo_filters)
         user["public_repos"] = len(repos)
-        events = [] if is_group else self.get_events(str(raw_user["id"]), limit=100)
-        graphql = {} if is_group else self._graphql_like_bundle(raw_user["id"], events)
+        events = [] if is_group else self.get_events(str(raw_user["id"]), limit=10)
+        # GitLab's public GraphQL API has no stable equivalent of GitHub's
+        # profile contribution calendar. Do not manufacture one from events.
+        graphql = {}
         return GitHubContext(
             target_user=username,
             user=user,
@@ -668,8 +670,6 @@ class GiteaClient(BaseProviderClient):
         "contributions",
         "sparkline",
         "streaks",
-        "pull_requests",
-        "issues",
         "social_accounts",
         "organizations",
         "starred",
@@ -682,7 +682,6 @@ class GiteaClient(BaseProviderClient):
         "repo_health",
         "topics",
         "packages",
-        "contribution_breakdown",
         "commit_cadence",
         "maintainer_activity",
     }
@@ -696,6 +695,9 @@ class GiteaClient(BaseProviderClient):
         "discussions": "Gitea-compatible APIs do not expose GitHub Discussions as a profile metric",
         "dependencies": "Gitea-compatible APIs do not expose a public SBOM summary API",
         "security_advisories": "Gitea-compatible APIs do not expose repository advisory summaries as a public profile metric",
+        "pull_requests": "Gitea search results are repository-owner scoped, not profile-author totals",
+        "issues": "Gitea search results are repository-owner scoped, not profile-author totals",
+        "contribution_breakdown": "Gitea heatmap data does not provide an exact issue, pull-request, and review breakdown",
     }
 
     def __init__(self, token: str, cache: CacheStore, offline: bool, base_url: str) -> None:
@@ -770,7 +772,7 @@ class GiteaClient(BaseProviderClient):
                 viewer_mode = True
         repos = filter_repos(self.get_repos(username, viewer_mode=viewer_mode), repo_filters)
         user["public_repos"] = len(repos)
-        events = self.get_events(username, limit=100)
+        events = self.get_events(username, limit=10)
         heatmap = self.get_heatmap(username)
         graphql = self._graphql_like_bundle(username, heatmap)
         return GitHubContext(
@@ -999,25 +1001,16 @@ class GiteaClient(BaseProviderClient):
         return {"rate": {"remaining": 0, "limit": 0}}
 
     def _graphql_like_bundle(self, username: str, heatmap: list[dict[str, Any]]) -> dict[str, Any]:
-        open_prs = self._count_list("/repos/issues/search", {"owner": username, "type": "pulls", "state": "open"})
-        closed_prs = self._count_list("/repos/issues/search", {"owner": username, "type": "pulls", "state": "closed"})
-        open_issues = self._count_list("/repos/issues/search", {"owner": username, "type": "issues", "state": "open"})
-        closed_issues = self._count_list("/repos/issues/search", {"owner": username, "type": "issues", "state": "closed"})
         days = _contribution_days_from_heatmap(heatmap)
         total = sum(day["contributionCount"] for week in days for day in week["contributionDays"])
         return {
             "contributionsCollection": {
                 "totalCommitContributions": total,
-                "totalIssueContributions": open_issues + closed_issues,
-                "totalPullRequestContributions": open_prs + closed_prs,
+                "totalIssueContributions": 0,
+                "totalPullRequestContributions": 0,
                 "totalPullRequestReviewContributions": 0,
                 "contributionCalendar": {"totalContributions": total, "weeks": days},
             },
-            "openPRs": {"totalCount": open_prs},
-            "mergedPRs": {"totalCount": 0},
-            "closedPRs": {"totalCount": closed_prs},
-            "openIssues": {"totalCount": open_issues},
-            "closedIssues": {"totalCount": closed_issues},
         }
 
     def _get_repo_optional(self, owner: str, name: str) -> dict[str, Any] | None:
