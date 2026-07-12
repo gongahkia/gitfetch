@@ -57,3 +57,20 @@ class LiveProviderSmokeTests(unittest.TestCase):
                     )
                     self.assertTrue(context.user.get("login"))
                     self.assertIsInstance(context.repos, list)
+
+    def test_gitlab_authenticated_viewer_context(self) -> None:
+        token = os.environ.get("GITFETCH_LIVE_GITLAB_TOKEN")
+        username = os.environ.get("GITFETCH_LIVE_GITLAB_USER")
+        if not token or not username:
+            self.skipTest("set GITFETCH_LIVE_GITLAB_USER and GITFETCH_LIVE_GITLAB_TOKEN")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config = preset_config("minimal")
+            config["profile"]["provider"] = "gitlab"
+            client = create_provider_client(
+                config,
+                token=token,
+                cache=CacheStore(Path(tmpdir), enabled=False, ttl_seconds=0),
+            )
+            context = client.get_context(username, "viewer", config["repo_filters"], include_graphql=False)
+        self.assertTrue(context.viewer_mode)
+        self.assertEqual(context.authenticated_login.lower(), username.lower())
