@@ -6,7 +6,7 @@ from unittest import mock
 
 from gitfetch.cache import CacheStore
 from gitfetch.config import ConfigError, get_token, preset_config
-from gitfetch.github_api import GitHubAPIError, GitHubClient
+from gitfetch.github_api import GitHubAPIError, GitHubClient, format_relative_days
 from gitfetch.providers import BitbucketClient, CodebergClient, ForgejoClient, GiteaClient, GitLabClient, create_provider_client
 
 
@@ -15,6 +15,10 @@ def _cache() -> CacheStore:
 
 
 class ProviderTests(unittest.TestCase):
+    def test_relative_days_rejects_naive_timestamps_and_clamps_future_dates(self) -> None:
+        self.assertIsNone(format_relative_days("2024-01-01T00:00:00"))
+        self.assertEqual(format_relative_days("2999-01-01T00:00:00+00:00"), "0 days ago")
+
     def test_github_enterprise_uses_its_own_graphql_endpoint(self) -> None:
         client = GitHubClient("token", _cache(), False, "https://github.example/api/v3")
         self.assertEqual(client._graphql_url(), "https://github.example/api/graphql")
