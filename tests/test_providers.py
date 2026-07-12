@@ -1,5 +1,7 @@
 import tempfile
 import unittest
+
+import requests
 from datetime import datetime, timezone
 from pathlib import Path
 from unittest import mock
@@ -18,6 +20,12 @@ class ProviderTests(unittest.TestCase):
     def test_relative_days_rejects_naive_timestamps_and_clamps_future_dates(self) -> None:
         self.assertIsNone(format_relative_days("2024-01-01T00:00:00"))
         self.assertEqual(format_relative_days("2999-01-01T00:00:00+00:00"), "0 days ago")
+
+    def test_provider_session_normalizes_transport_errors_for_library_callers(self) -> None:
+        client = GitHubClient("", _cache(), False)
+        with mock.patch("requests.Session.request", side_effect=requests.ConnectionError("offline")):
+            with self.assertRaisesRegex(GitHubAPIError, "network request failed: offline"):
+                client.get_user("alice")
 
     def test_github_rate_limit_uses_stale_cached_response(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

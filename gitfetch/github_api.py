@@ -39,6 +39,16 @@ class GitHubAPIError(RuntimeError):
         self.rate_limited = rate_limited
 
 
+class ProviderSession(requests.Session):
+    """Requests session that gives SDK consumers a stable error type."""
+
+    def request(self, *args, **kwargs):
+        try:
+            return super().request(*args, **kwargs)
+        except requests.RequestException as exc:
+            raise GitHubAPIError(f"network request failed: {exc}") from exc
+
+
 @dataclass
 class GitHubContext:
     target_user: str
@@ -59,7 +69,7 @@ class GitHubClient:
         self.cache = cache
         self.offline = offline
         self.base_url = base_url.rstrip("/")
-        self.session = requests.Session()
+        self.session = ProviderSession()
         configure_http_retries(self.session)
         self.session.headers.update(
             {
