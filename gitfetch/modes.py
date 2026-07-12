@@ -552,8 +552,8 @@ def handle_compare_command(args: argparse.Namespace) -> int:
         parts: list[str] = []
         for block in blocks:
             line = block[row] if row < len(block) else ""
-            visible = visible_len(line)
-            pad = " " * max(0, column_width - visible)
+            visible_width = visible_len(line)
+            pad = " " * max(0, column_width - visible_width)
             parts.append(line + pad)
         rows.append("    ".join(parts))
     summary_text = module_lines([summary], enabled_color, palette)

@@ -22,7 +22,7 @@ from gitfetch.config import (
     PROVIDER_TOKEN_ENVS,
     SUPPORTED_PROVIDERS,
 )
-from gitfetch.github_api import GitHubAPIError, GitHubClient
+from gitfetch.github_api import GitHubAPIError
 from gitfetch.modules import MODULE_HANDLERS, available_module_metadata, build_module_list, load_plugin_modules
 from gitfetch.modules.builtin import GRAPHQL_MODULES, ModuleResult
 from gitfetch.providers import create_provider_client
