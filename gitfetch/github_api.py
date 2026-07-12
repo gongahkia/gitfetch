@@ -82,6 +82,13 @@ class GitHubClient:
         auth_scope = f"token:{hashlib.sha256(self.token.encode('utf-8')).hexdigest()[:16]}" if self.token else "anon"
         return f"{self.provider_name}|{self.base_url}|{prefix}|{auth_scope}|{suffix}"
 
+    def _graphql_url(self) -> str:
+        # GitHub Enterprise Server exposes REST at /api/v3 and GraphQL at
+        # /api/graphql; GitHub.com exposes both beneath the API root.
+        if self.base_url.endswith("/api/v3"):
+            return f"{self.base_url.rsplit('/', 1)[0]}/graphql"
+        return f"{self.base_url}/graphql"
+
     def supports_module(self, name: str) -> bool:
         return True
 
@@ -354,7 +361,7 @@ class GitHubClient:
         if self.offline:
             return {}
         try:
-            response = self.session.get("https://api.github.com/rate_limit", timeout=10)
+            response = self.session.get(f"{self.base_url}/rate_limit", timeout=10)
         except requests.RequestException:
             return {}
         if not response.ok:
@@ -369,7 +376,7 @@ class GitHubClient:
         if self.offline:
             return None
         response = self.session.get(
-            f"https://api.github.com/repos/{username}/{username}/readme",
+            f"{self.base_url}/repos/{username}/{username}/readme",
             timeout=20,
         )
         if response.status_code == 404:
@@ -463,7 +470,7 @@ class GitHubClient:
         }
         """
         response = self.session.post(
-            "https://api.github.com/graphql",
+            self._graphql_url(),
             json={"query": query, "variables": {"login": username, "showcaseLimit": 10, "pinnedLimit": 6}},
             timeout=20,
         )
