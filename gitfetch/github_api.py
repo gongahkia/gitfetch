@@ -6,11 +6,31 @@ from datetime import datetime, timezone
 from typing import Any
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 from gitfetch.cache import CacheStore
 
 
 USER_AGENT = "gitfetch/2.0.0"
+
+
+def configure_http_retries(session: requests.Session) -> None:
+    """Retry transient, idempotent GET failures and honor Retry-After."""
+    retries = Retry(
+        total=2,
+        connect=2,
+        read=2,
+        status=2,
+        backoff_factor=0.5,
+        status_forcelist=(429, 500, 502, 503, 504),
+        allowed_methods=frozenset({"GET"}),
+        respect_retry_after_header=True,
+        raise_on_status=False,
+    )
+    adapter = HTTPAdapter(max_retries=retries)
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
 
 
 class GitHubAPIError(RuntimeError):
@@ -38,6 +58,7 @@ class GitHubClient:
         self.offline = offline
         self.base_url = base_url.rstrip("/")
         self.session = requests.Session()
+        configure_http_retries(self.session)
         self.session.headers.update(
             {
                 "Accept": "application/vnd.github+json",
