@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import base64
 import re
-import tempfile
-import urllib.request
+from io import BytesIO
 from typing import Any, Iterator
 
 from PIL import Image, ImageDraw, ImageFont
 
+from gitfetch.images import fetch_avatar_image
 from gitfetch.modules.builtin import ModuleResult
 
 
@@ -127,44 +127,18 @@ def render_terminal_svg(text: str, config: dict[str, Any]) -> str:
 
 
 def _embed_avatar_data(url: str | None, size: int) -> str | None:
-    if not url:
+    image = _avatar_image(url, size)
+    if image is None:
         return None
-    tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
-    try:
-        urllib.request.urlretrieve(url, tmp.name)
-        img = Image.open(tmp.name).convert("RGBA").resize((size, size))
-        out = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
-        img.save(out.name, "PNG")
-        with open(out.name, "rb") as fh:
-            encoded = base64.b64encode(fh.read()).decode("ascii")
-        return f"data:image/png;base64,{encoded}"
-    except (OSError, ValueError):
-        return None
-    finally:
-        tmp.close()
-        try:
-            import os
-            os.remove(tmp.name)
-        except OSError:
-            pass
+    output = BytesIO()
+    image.save(output, "PNG")
+    encoded = base64.b64encode(output.getvalue()).decode("ascii")
+    return f"data:image/png;base64,{encoded}"
 
 
 def _avatar_image(url: str | None, size: int) -> Image.Image | None:
-    if not url:
-        return None
-    tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
-    try:
-        urllib.request.urlretrieve(url, tmp.name)
-        return Image.open(tmp.name).convert("RGBA").resize((size, size))
-    except (OSError, ValueError):
-        return None
-    finally:
-        tmp.close()
-        try:
-            import os
-            os.remove(tmp.name)
-        except OSError:
-            pass
+    image = fetch_avatar_image(url)
+    return image.resize((size, size)) if image else None
 
 
 def _font(size: int) -> ImageFont.ImageFont:

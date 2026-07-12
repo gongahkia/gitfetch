@@ -5,12 +5,11 @@ import os
 import re
 import shutil
 import sys
-import tempfile
-import urllib.request
 from typing import Any
 
 from PIL import Image
 
+from gitfetch.images import fetch_avatar_image
 from gitfetch.modules.builtin import ModuleResult
 
 
@@ -218,18 +217,7 @@ _effective_avatar_color = effective_avatar_color
 
 
 def _load_avatar(url: str) -> Image.Image | None:
-    tmp = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
-    try:
-        urllib.request.urlretrieve(url, tmp.name)
-        return Image.open(tmp.name).copy()
-    except (OSError, ValueError):
-        return None
-    finally:
-        tmp.close()
-        try:
-            os.remove(tmp.name)
-        except OSError:
-            pass
+    return fetch_avatar_image(url)
 
 
 def render_avatar(avatar_url: str | None, width: int, style: str, color_mode: str, ramp: str) -> list[str]:
