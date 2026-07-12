@@ -434,10 +434,41 @@ def load_config(path: Path | None = None) -> dict[str, Any]:
     return data
 
 
+def _validate_known_config_types(value: Any, template: Any, path: str) -> None:
+    """Validate values represented by the built-in configuration schema.
+
+    Unknown plugin keys remain intentionally unconstrained.
+    """
+    if isinstance(template, dict):
+        if not isinstance(value, dict):
+            raise ConfigError(f"{path} must be a table")
+        for key, child_template in template.items():
+            if key in value:
+                _validate_known_config_types(value[key], child_template, f"{path}.{key}")
+        return
+    if isinstance(template, list):
+        if not isinstance(value, list):
+            raise ConfigError(f"{path} must be an array")
+        if template:
+            item_template = template[0]
+            for index, item in enumerate(value):
+                _validate_known_config_types(item, item_template, f"{path}[{index}]")
+        return
+    if isinstance(template, bool):
+        if not isinstance(value, bool):
+            raise ConfigError(f"{path} must be a boolean")
+    elif isinstance(template, int):
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise ConfigError(f"{path} must be an integer")
+    elif isinstance(template, str) and not isinstance(value, str):
+        raise ConfigError(f"{path} must be a string")
+
+
 def normalize_config(config: dict[str, Any]) -> None:
     for section in ("profile", "providers", "plugins", "cache", "display", "repo_filters", "modules"):
         if not isinstance(config.get(section), dict):
             raise ConfigError(f"{section} must be a table")
+    _validate_known_config_types(config, DEFAULT_CONFIG, "config")
     modules = config["modules"]
     order = modules.get("order", DEFAULT_MODULE_ORDER + OPTIONAL_MODULES)
     if not isinstance(order, list) or not all(isinstance(name, str) for name in order):
