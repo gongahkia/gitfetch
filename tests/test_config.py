@@ -2,6 +2,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from gitfetch.config import ConfigError, load_config, preset_config, set_override, write_config
 
@@ -47,6 +48,15 @@ class ConfigTests(unittest.TestCase):
             path.write_text("[modules.releases]\nlimit = 'five'\n", encoding="utf-8")
             with self.assertRaisesRegex(ConfigError, "config.modules.releases.limit"):
                 load_config(path)
+
+    def test_github_cli_token_is_used_as_a_last_resort(self) -> None:
+        config = preset_config("minimal")
+        with mock.patch("shutil.which", return_value="/usr/local/bin/gh"), mock.patch("subprocess.run") as run:
+            run.return_value = mock.Mock(returncode=0, stdout="gh-token\n")
+            from gitfetch.config import get_token
+
+            self.assertEqual(get_token(None, config), "gh-token")
+        run.assert_called_once()
 
     def test_set_override_coerces_values(self) -> None:
         config = preset_config("compact")
