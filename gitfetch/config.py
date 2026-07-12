@@ -434,8 +434,21 @@ def load_config(path: Path | None = None) -> dict[str, Any]:
 
 
 def normalize_config(config: dict[str, Any]) -> None:
-    modules = config.setdefault("modules", {})
+    for section in ("profile", "providers", "plugins", "cache", "display", "repo_filters", "modules"):
+        if not isinstance(config.get(section), dict):
+            raise ConfigError(f"{section} must be a table")
+    modules = config["modules"]
     order = modules.get("order", DEFAULT_MODULE_ORDER + OPTIONAL_MODULES)
+    if not isinstance(order, list) or not all(isinstance(name, str) for name in order):
+        raise ConfigError("modules.order must be an array of module names")
+    for name in MODULE_METADATA:
+        if not isinstance(modules.get(name, {}), dict):
+            raise ConfigError(f"modules.{name} must be a table")
+    plugins = config["plugins"]
+    if not isinstance(plugins.get("paths", []), list) or not isinstance(plugins.get("modules", []), list):
+        raise ConfigError("plugins.paths and plugins.modules must be arrays")
+    if not isinstance(config["repo_filters"], dict):
+        raise ConfigError("repo_filters must be a table")
     seen: list[str] = []
     normalized_order: list[str] = []
     for name in order:
@@ -462,12 +475,14 @@ def normalize_config(config: dict[str, Any]) -> None:
         raise ConfigError("profile.mode must be 'public' or 'viewer'")
     if config["display"].get("layout") not in {"split", "stack"}:
         raise ConfigError("display.layout must be 'split' or 'stack'")
-    if config["display"].get("avatar_width", 0) <= 0:
-        raise ConfigError("display.avatar_width must be greater than 0")
-    if config["display"].get("heatmap_weeks", 0) <= 0:
-        raise ConfigError("display.heatmap_weeks must be greater than 0")
-    if config["display"].get("margin", 0) < 0:
-        raise ConfigError("display.margin must be non-negative")
+    for key, message, minimum in (
+        ("avatar_width", "display.avatar_width must be greater than 0", 1),
+        ("heatmap_weeks", "display.heatmap_weeks must be greater than 0", 1),
+        ("margin", "display.margin must be non-negative", 0),
+    ):
+        value = config["display"].get(key)
+        if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
+            raise ConfigError(message)
     from gitfetch.render import THEMES
     theme = config["display"].get("theme", "default")
     if theme not in THEMES:
@@ -478,8 +493,9 @@ def normalize_config(config: dict[str, Any]) -> None:
     color_mode = config["display"].get("avatar_color", "auto")
     if color_mode not in {"auto", "none", "256", "truecolor"}:
         raise ConfigError(f"display.avatar_color '{color_mode}' must be auto, none, 256, or truecolor")
-    if config["cache"].get("ttl_seconds", 0) < 0:
-        raise ConfigError("cache.ttl_seconds must be non-negative")
+    ttl_seconds = config["cache"].get("ttl_seconds")
+    if isinstance(ttl_seconds, bool) or not isinstance(ttl_seconds, int) or ttl_seconds < 0:
+        raise ConfigError("cache.ttl_seconds must be a non-negative integer")
 
 
 def get_token(cli_token: str | None, config: dict[str, Any]) -> str:
