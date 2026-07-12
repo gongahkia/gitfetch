@@ -583,7 +583,29 @@ def get_token(cli_token: str | None, config: dict[str, Any]) -> str:
             return ""
         if result.returncode == 0:
             return result.stdout.strip()
+    if provider == "github":
+        return _github_cli_token()
     return ""
+
+
+def _github_cli_token() -> str:
+    """Use an existing GitHub CLI login without persisting its token."""
+    import shutil
+    import subprocess
+
+    if not shutil.which("gh"):
+        return ""
+    try:
+        result = subprocess.run(
+            ["gh", "auth", "token"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return result.stdout.strip() if result.returncode == 0 else ""
 
 
 def apply_named_profile(config: dict[str, Any], name: str | None) -> None:
