@@ -224,13 +224,31 @@ class GitLabClient(BaseProviderClient):
             raise GitHubAPIError(f"{self.provider_title} user or resource not found")
         return users[0]
 
+    def _resolve_group(self, namespace: str) -> dict[str, Any]:
+        payload = self._get_json(
+            f"/groups/{quote(namespace, safe='')}",
+            cache_key=self._cache_key("group_lookup", namespace),
+        )
+        if not isinstance(payload, dict) or not payload.get("id"):
+            raise GitHubAPIError(f"{self.provider_title} user or resource not found")
+        return payload
+
     def get_context(self, username: str, mode: str, repo_filters: dict[str, Any]) -> GitHubContext:
-        user = self.get_user(username)
-        user_id = user["id"]
+        try:
+            raw_user = self._resolve_user(username)
+        except GitHubAPIError:
+            # A GitLab namespace can be a group rather than a user.  Groups do
+            # not have a user activity/contribution API, but their public
+            # projects are still a useful profile target.
+            user = self._normalize_group(self._resolve_group(username))
+            is_group = True
+        else:
+            user = self._normalize_user(raw_user)
+            is_group = False
         repos = filter_repos(self.get_repos(username, viewer_mode=False), repo_filters)
         user["public_repos"] = len(repos)
-        events = self.get_events(str(user_id), limit=100)
-        graphql = self._graphql_like_bundle(user_id, events)
+        events = [] if is_group else self.get_events(str(raw_user["id"]), limit=100)
+        graphql = {} if is_group else self._graphql_like_bundle(raw_user["id"], events)
         return GitHubContext(
             target_user=username,
             user=user,
@@ -242,13 +260,21 @@ class GitLabClient(BaseProviderClient):
         )
 
     def get_user(self, username: str) -> dict[str, Any]:
-        raw = self._resolve_user(username)
-        return self._normalize_user(raw)
+        try:
+            return self._normalize_user(self._resolve_user(username))
+        except GitHubAPIError:
+            return self._normalize_group(self._resolve_group(username))
 
     def get_repos(self, username: str, viewer_mode: bool = False) -> list[dict[str, Any]]:
-        user = self._resolve_user(username)
+        try:
+            user = self._resolve_user(username)
+        except GitHubAPIError:
+            group = self._resolve_group(username)
+            path = f"/groups/{quote(str(group['id']), safe='')}/projects"
+        else:
+            path = f"/users/{user['id']}/projects"
         projects = self._paginate(
-            f"/users/{user['id']}/projects",
+            path,
             params={"order_by": "updated_at", "sort": "desc", "simple": "false"},
             cache_key=self._cache_key("repos", username),
         )

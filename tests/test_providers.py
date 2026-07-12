@@ -6,7 +6,7 @@ from unittest import mock
 
 from gitfetch.cache import CacheStore
 from gitfetch.config import ConfigError, get_token, preset_config
-from gitfetch.github_api import GitHubClient
+from gitfetch.github_api import GitHubAPIError, GitHubClient
 from gitfetch.providers import BitbucketClient, CodebergClient, ForgejoClient, GiteaClient, GitLabClient, create_provider_client
 
 
@@ -41,6 +41,19 @@ class ProviderTests(unittest.TestCase):
         second = GitLabClient("second-token", _cache(), False, "https://gitlab.com/api/v4")
         self.assertNotEqual(first._cache_key("viewer", "self"), second._cache_key("viewer", "self"))
         self.assertNotIn("first-token", first._cache_key("viewer", "self"))
+
+    def test_gitlab_group_can_be_rendered_as_a_profile_target(self) -> None:
+        client = GitLabClient("", _cache(), False, "https://gitlab.com/api/v4")
+        group = {"id": 7, "path": "gitlab-org", "name": "GitLab.org", "projects_count": 1}
+        project = {"id": 42, "path": "repo", "path_with_namespace": "gitlab-org/repo"}
+        with mock.patch.object(client, "_resolve_user", side_effect=GitHubAPIError("not a user")), mock.patch.object(
+            client, "_resolve_group", return_value=group
+        ), mock.patch.object(client, "_paginate", return_value=[project]):
+            context = client.get_context("gitlab-org", "public", {})
+        self.assertEqual(context.user["login"], "gitlab-org")
+        self.assertEqual(context.user["public_repos"], 1)
+        self.assertEqual(context.repos[0]["full_name"], "gitlab-org/repo")
+        self.assertEqual(context.events, [])
 
     def test_gitlab_project_normalization_matches_module_shape(self) -> None:
         client = GitLabClient("", _cache(), False, "https://gitlab.com/api/v4")
