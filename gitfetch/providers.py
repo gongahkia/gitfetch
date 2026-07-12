@@ -236,8 +236,16 @@ class GitLabClient(BaseProviderClient):
         else:
             user = self._normalize_user(raw_user)
             is_group = False
-        repos = filter_repos(self.get_repos(username, viewer_mode=False), repo_filters)
-        user["public_repos"] = len(repos)
+        authenticated_login = None
+        viewer_mode = False
+        if not is_group and mode == "viewer" and self.token:
+            viewer = self.get_authenticated_user()
+            authenticated_login = viewer.get("login")
+            if authenticated_login and authenticated_login.lower() == username.lower():
+                user = viewer
+                viewer_mode = True
+        repos = filter_repos(self.get_repos(username, viewer_mode=viewer_mode), repo_filters)
+        user["public_repos"] = sum(1 for repo in repos if not repo.get("private")) if viewer_mode else len(repos)
         events = [] if is_group else self.get_events(str(raw_user["id"]), limit=10)
         # GitLab's public GraphQL API has no stable equivalent of GitHub's
         # profile contribution calendar. Do not manufacture one from events.
@@ -247,8 +255,8 @@ class GitLabClient(BaseProviderClient):
             user=user,
             repos=repos,
             events=events,
-            viewer_mode=False,
-            authenticated_login=None,
+            viewer_mode=viewer_mode,
+            authenticated_login=authenticated_login,
             graphql=graphql,
         )
 
@@ -258,19 +266,26 @@ class GitLabClient(BaseProviderClient):
         except GitHubAPIError:
             return self._normalize_group(self._resolve_group(username))
 
+    def get_authenticated_user(self) -> dict[str, Any]:
+        raw = self._get_json("/user", cache_key=self._cache_key("viewer", "self"))
+        return self._normalize_user(raw)
+
     def get_repos(self, username: str, viewer_mode: bool = False) -> list[dict[str, Any]]:
-        try:
-            user = self._resolve_user(username)
-        except GitHubAPIError:
-            group = self._resolve_group(username)
-            path = f"/groups/{quote(str(group['id']), safe='')}/projects"
+        if viewer_mode:
+            path = "/projects"
+            params = {"owned": "true", "order_by": "updated_at", "sort": "desc", "simple": "false"}
+            cache_key = self._cache_key("repos", "viewer", username)
         else:
-            path = f"/users/{user['id']}/projects"
-        projects = self._paginate(
-            path,
-            params={"order_by": "updated_at", "sort": "desc", "simple": "false"},
-            cache_key=self._cache_key("repos", username),
-        )
+            try:
+                user = self._resolve_user(username)
+            except GitHubAPIError:
+                group = self._resolve_group(username)
+                path = f"/groups/{quote(str(group['id']), safe='')}/projects"
+            else:
+                path = f"/users/{user['id']}/projects"
+            params = {"order_by": "updated_at", "sort": "desc", "simple": "false"}
+            cache_key = self._cache_key("repos", username)
+        projects = self._paginate(path, params=params, cache_key=cache_key)
         return [self._normalize_project(project) for project in projects]
 
     def get_languages(self, languages_url: str) -> dict[str, int]:

@@ -81,6 +81,22 @@ class ProviderTests(unittest.TestCase):
         self.assertNotEqual(first._cache_key("viewer", "self"), second._cache_key("viewer", "self"))
         self.assertNotIn("first-token", first._cache_key("viewer", "self"))
 
+    def test_gitlab_viewer_mode_uses_owned_projects(self) -> None:
+        client = GitLabClient("token", _cache(), False, "https://gitlab.com/api/v4")
+        raw = {"id": 1, "username": "alice"}
+        viewer = {"login": "alice"}
+        repos = [{"private": False}, {"private": True}]
+        with mock.patch.object(client, "_resolve_user", return_value=raw), mock.patch.object(
+            client, "get_authenticated_user", return_value=viewer
+        ), mock.patch.object(client, "get_repos", return_value=repos) as get_repos, mock.patch.object(
+            client, "get_events", return_value=[]
+        ):
+            context = client.get_context("alice", "viewer", {})
+        get_repos.assert_called_once_with("alice", viewer_mode=True)
+        self.assertTrue(context.viewer_mode)
+        self.assertEqual(context.authenticated_login, "alice")
+        self.assertEqual(context.user["public_repos"], 1)
+
     def test_gitlab_group_can_be_rendered_as_a_profile_target(self) -> None:
         client = GitLabClient("", _cache(), False, "https://gitlab.com/api/v4")
         group = {"id": 7, "path": "gitlab-org", "name": "GitLab.org", "projects_count": 1}
