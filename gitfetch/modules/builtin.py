@@ -113,6 +113,10 @@ def module_languages(config: dict[str, Any], context: GitHubContext, client: Git
     if not total_bytes:
         return ModuleResult("languages", "Languages", [], {}, hidden=True)
     ranked = sorted(totals.items(), key=lambda item: item[1], reverse=True)[:limit]
+    if getattr(client, "language_breakdown_unit", "bytes") == "repositories":
+        lines = [f"{language} {count} repo(s)" for language, count in ranked]
+        data = [{"language": language, "repositories": count} for language, count in ranked]
+        return ModuleResult("languages", "Languages (Repo Count)", lines, data)
     lines = [f"{language} {count * 100 // total_bytes}%" for language, count in ranked]
     data = [{"language": language, "bytes": count} for language, count in ranked]
     return ModuleResult("languages", "Languages", lines, data)

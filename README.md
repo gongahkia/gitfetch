@@ -22,7 +22,7 @@ Serving you snapshots of your [Git Provider](https://git-scm.com/) profile in th
 - ASCII art avatar rendered from your Git Provider profile picture
 - Provider support for GitHub, GitLab, Bitbucket Cloud, Gitea, Forgejo, and Codeberg
 - Profile stats: hours since joining, public repos, followers, days since last commit
-- Top-5 language breakdown by repository bytes
+- Top-5 language breakdown by repository bytes where the provider exposes byte data
 - Contribution heatmap (last 12 weeks, requires `--token`)
 - Config presets: `minimal`, `compact`, `full`, and `showcase`
 - Named profiles for switching between saved provider users or token sources
