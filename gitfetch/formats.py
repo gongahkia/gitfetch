@@ -20,6 +20,11 @@ NAMED_FG = {
     94: "#729fcf", 95: "#ad7fa8", 96: "#34e2e2", 97: "#eeeeec",
 }
 
+def _truncate(text: Any, limit: int) -> str:
+    value = str(text)
+    return value if len(value) <= limit else value[: max(0, limit - 1)] + "…"
+
+
 CARD_PALETTE = {
     "background": "#0d1117",
     "surface": "#161b22",
@@ -185,18 +190,20 @@ def render_card_svg(config: dict[str, Any], user: dict[str, Any], modules: list[
         )
     text_x = 32 + (avatar_size + 24 if avatar_data else 0)
 
-    login = user.get("login", "")
+    login = str(user.get("login", ""))
     name = user.get("name") or login
     bio = user.get("bio") or ""
+    title_limit = max(12, (width - text_x - 32) // 12)
+    bio_limit = max(20, (width - text_x - 32) // 7)
     parts.append(
-        f'<text x="{text_x}" y="64" fill="{palette["text"]}" font-size="22" font-weight="600">{_xml_escape(name)}</text>'
+        f'<text x="{text_x}" y="64" fill="{palette["text"]}" font-size="22" font-weight="600">{_xml_escape(_truncate(name, title_limit))}</text>'
     )
     parts.append(
-        f'<text x="{text_x}" y="86" fill="{palette["accent"]}" font-size="14">@{_xml_escape(login)}</text>'
+        f'<text x="{text_x}" y="86" fill="{palette["accent"]}" font-size="14">@{_xml_escape(_truncate(login, title_limit))}</text>'
     )
     if bio:
         parts.append(
-            f'<text x="{text_x}" y="110" fill="{palette["muted"]}" font-size="13">{_xml_escape(bio[:80])}</text>'
+            f'<text x="{text_x}" y="110" fill="{palette["muted"]}" font-size="13">{_xml_escape(_truncate(bio, bio_limit))}</text>'
         )
 
     stats_y = 160
@@ -227,8 +234,10 @@ def render_card_svg(config: dict[str, Any], user: dict[str, Any], modules: list[
         )
         x = 32
         for entry in languages[:5]:
-            label = f"{entry.get('language', '?')}"
+            label = _truncate(entry.get("language", "?"), 18)
             pill_w = max(60, len(label) * 8 + 18)
+            if x + pill_w > width - 32:
+                break
             parts.append(
                 f'<rect x="{x}" y="232" rx="10" ry="10" width="{pill_w}" height="22" fill="{palette["surface"]}" stroke="{palette["border"]}"/>'
             )
@@ -275,13 +284,15 @@ def render_card_png(config: dict[str, Any], user: dict[str, Any], modules: list[
         img.paste(avatar, (32, 32), mask)
         text_x += avatar_size + 24
 
-    login = user.get("login", "")
+    login = str(user.get("login", ""))
     name = user.get("name") or login
-    draw.text((text_x, 54), str(name), fill=palette["text"], font=title_font)
-    draw.text((text_x, 84), f"@{login}", fill=palette["accent"], font=body_font)
+    title_limit = max(12, (width - text_x - 32) // 12)
+    bio_limit = max(20, (width - text_x - 32) // 7)
+    draw.text((text_x, 54), _truncate(name, title_limit), fill=palette["text"], font=title_font)
+    draw.text((text_x, 84), f"@{_truncate(login, title_limit)}", fill=palette["accent"], font=body_font)
     bio = user.get("bio") or ""
     if bio:
-        draw.text((text_x, 108), str(bio)[:80], fill=palette["muted"], font=small_font)
+        draw.text((text_x, 108), _truncate(bio, bio_limit), fill=palette["muted"], font=small_font)
 
     stats = [
         (str(user.get("public_repos", 0)), "repos"),
@@ -305,8 +316,10 @@ def render_card_png(config: dict[str, Any], user: dict[str, Any], modules: list[
         draw.text((32, 216), "LANGUAGES", fill=palette["muted"], font=small_font)
         x = 32
         for entry in languages[:5]:
-            label = str(entry.get("language", "?"))
+            label = _truncate(entry.get("language", "?"), 18)
             pill_w = max(60, len(label) * 8 + 18)
+            if x + pill_w > width - 32:
+                break
             draw.rounded_rectangle((x, 232, x + pill_w, 254), radius=10, fill=palette["surface"], outline=palette["border"])
             draw.text((x + 10, 237), label, fill=palette["accent"], font=small_font)
             x += pill_w + 8
@@ -343,9 +356,11 @@ def render_summary_card_svg(
         parts.append(f'<defs><clipPath id="avatarClip"><circle cx="{32 + avatar_size // 2}" cy="{32 + avatar_size // 2}" r="{avatar_size // 2}"/></clipPath></defs>')
         parts.append(f'<image href="{avatar_data}" x="32" y="32" width="{avatar_size}" height="{avatar_size}" clip-path="url(#avatarClip)"/>')
         text_x += avatar_size + 20
-    parts.append(f'<text x="{text_x}" y="62" fill="{palette["text"]}" font-size="23" font-weight="600">{_xml_escape(title[:80])}</text>')
+    title_limit = max(12, (width - text_x - 32) // 13)
+    subtitle_limit = max(20, (width - text_x - 32) // 7)
+    parts.append(f'<text x="{text_x}" y="62" fill="{palette["text"]}" font-size="23" font-weight="600">{_xml_escape(_truncate(title, title_limit))}</text>')
     if subtitle:
-        parts.append(f'<text x="{text_x}" y="88" fill="{palette["accent"]}" font-size="13">{_xml_escape(subtitle[:110])}</text>')
+        parts.append(f'<text x="{text_x}" y="88" fill="{palette["accent"]}" font-size="13">{_xml_escape(_truncate(subtitle, subtitle_limit))}</text>')
 
     y = 132
     for module in modules[:5]:
@@ -391,9 +406,11 @@ def render_summary_card_png(
         ImageDraw.Draw(mask).ellipse((0, 0, avatar_size, avatar_size), fill=255)
         img.paste(avatar, (32, 32), mask)
         text_x += avatar_size + 20
-    draw.text((text_x, 44), title[:80], fill=palette["text"], font=title_font)
+    title_limit = max(12, (width - text_x - 32) // 13)
+    subtitle_limit = max(20, (width - text_x - 32) // 7)
+    draw.text((text_x, 44), _truncate(title, title_limit), fill=palette["text"], font=title_font)
     if subtitle:
-        draw.text((text_x, 78), subtitle[:110], fill=palette["accent"], font=body_font)
+        draw.text((text_x, 78), _truncate(subtitle, subtitle_limit), fill=palette["accent"], font=body_font)
 
     y = 126
     for module in modules[:5]:
