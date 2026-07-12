@@ -151,6 +151,7 @@ $ gitfetch --set profile.provider=gitlab
 $ gitfetch --set providers.gitlab.base_url=https://gitlab.example.com/api/v4
 $ gitfetch --set providers.forgejo.base_url=https://forgejo.example.com/api/v1
 $ gitfetch --set modules.languages.limit=3
+$ gitfetch --set modules.languages.max_repos=0 # scan every repo; default samples 40 to limit API cost
 $ gitfetch --set repo_filters.exclude_forks=false
 ```
 
