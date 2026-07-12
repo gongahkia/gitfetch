@@ -12,6 +12,10 @@ from gitfetch.github_api import GitHubClient, GitHubContext, format_relative_day
 
 HEATMAP_BLOCKS = [" ", "░", "▒", "▓", "█"]
 SPARKLINE_BLOCKS = [" ", "▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"]
+GRAPHQL_MODULES = frozenset({
+    "contributions", "sparkline", "streaks", "pull_requests", "issues",
+    "pinned", "showcase", "sponsors", "contribution_breakdown", "commit_cadence",
+})
 
 
 @dataclass

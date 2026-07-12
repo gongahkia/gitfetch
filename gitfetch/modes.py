@@ -20,7 +20,7 @@ from gitfetch.config import (
 )
 from gitfetch.github_api import GitHubAPIError, GitHubClient
 from gitfetch.modules import MODULE_HANDLERS, available_module_metadata, build_module_list, load_plugin_modules
-from gitfetch.modules.builtin import ModuleResult
+from gitfetch.modules.builtin import GRAPHQL_MODULES, ModuleResult
 from gitfetch.providers import create_provider_client
 from gitfetch.render import (
     SPLIT_GAP,
@@ -445,6 +445,8 @@ def handle_compare_command(args: argparse.Namespace) -> int:
         column_width = max(20, budget // user_count)
     avatar_color = effective_avatar_color(config, output_format)
     metadata = available_module_metadata()
+    selected_modules = build_module_list(config)
+    include_graphql = bool(set(selected_modules) & GRAPHQL_MODULES)
 
     for user_login in args.users:
         try:
@@ -452,13 +454,14 @@ def handle_compare_command(args: argparse.Namespace) -> int:
                 username=user_login,
                 mode="public",
                 repo_filters=config["repo_filters"],
+                include_graphql=include_graphql,
             )
         except GitHubAPIError as exc:
             print(f"api error for {user_login}: {exc}")
             return 1
         contexts.append(ctx)
         modules: list[ModuleResult] = []
-        for name in build_module_list(config):
+        for name in selected_modules:
             try:
                 if not client.supports_module(name):
                     modules.append(_unsupported_provider_result(name, client))

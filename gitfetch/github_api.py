@@ -74,6 +74,7 @@ class GitHubClient:
         username: str,
         mode: str,
         repo_filters: dict[str, Any],
+        include_graphql: bool = True,
     ) -> GitHubContext:
         public_user = self.get_user(username)
         authenticated_login = None
@@ -88,7 +89,7 @@ class GitHubClient:
         repos = self.get_repos(username, viewer_mode=viewer_mode)
         repos = filter_repos(repos, repo_filters)
         events = self.get_events(username)
-        graphql = self.get_graphql_bundle(username) if self.token else {}
+        graphql = self.get_graphql_bundle(username) if self.token and include_graphql else {}
         return GitHubContext(
             target_user=username,
             user=public_user,
