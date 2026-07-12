@@ -19,6 +19,15 @@ class ProviderTests(unittest.TestCase):
         self.assertIsNone(format_relative_days("2024-01-01T00:00:00"))
         self.assertEqual(format_relative_days("2999-01-01T00:00:00+00:00"), "0 days ago")
 
+    def test_context_skips_graphql_when_no_graphql_module_is_selected(self) -> None:
+        client = GitHubClient("token", _cache(), False)
+        with mock.patch.object(client, "get_user", return_value={"login": "alice"}), mock.patch.object(
+            client, "get_repos", return_value=[]
+        ), mock.patch.object(client, "get_events", return_value=[]), mock.patch.object(client, "get_graphql_bundle") as graphql:
+            context = client.get_context("alice", "public", {}, include_graphql=False)
+        self.assertEqual(context.graphql, {})
+        graphql.assert_not_called()
+
     def test_clients_retry_transient_get_responses(self) -> None:
         client = GitHubClient("", _cache(), False)
         retries = client.session.get_adapter("https://").max_retries

@@ -101,6 +101,7 @@ class CLITests(unittest.TestCase):
                 username="octocat",
                 mode="public",
                 repo_filters=mock.ANY,
+                include_graphql=False,
             )
 
     @mock.patch("gitfetch.cli.create_provider_client")

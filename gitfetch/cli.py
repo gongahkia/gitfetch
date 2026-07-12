@@ -24,7 +24,7 @@ from gitfetch.config import (
 )
 from gitfetch.github_api import GitHubAPIError, GitHubClient
 from gitfetch.modules import MODULE_HANDLERS, available_module_metadata, build_module_list, load_plugin_modules
-from gitfetch.modules.builtin import ModuleResult
+from gitfetch.modules.builtin import GRAPHQL_MODULES, ModuleResult
 from gitfetch.providers import create_provider_client
 from gitfetch.render import render_output
 
@@ -422,15 +422,18 @@ def handle_render_command(args: argparse.Namespace) -> int:
     )
     client = create_provider_client(config, token=token, cache=cache, offline=bool(args.offline))
 
+    selected_modules = build_module_list(config)
+
     def render_once() -> None:
         context = client.get_context(
             username=username,
             mode=config["profile"]["mode"],
             repo_filters=config["repo_filters"],
+            include_graphql=bool(set(selected_modules) & GRAPHQL_MODULES),
         )
         module_results = []
         metadata = available_module_metadata()
-        for name in build_module_list(config):
+        for name in selected_modules:
             if not client.supports_module(name):
                 module_results.append(_unsupported_provider_result(name, client))
                 continue

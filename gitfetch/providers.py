@@ -215,7 +215,9 @@ class GitLabClient(BaseProviderClient):
             raise GitHubAPIError(f"{self.provider_title} user or resource not found")
         return payload
 
-    def get_context(self, username: str, mode: str, repo_filters: dict[str, Any]) -> GitHubContext:
+    def get_context(
+        self, username: str, mode: str, repo_filters: dict[str, Any], include_graphql: bool = True
+    ) -> GitHubContext:
         try:
             raw_user = self._resolve_user(username)
         except GitHubAPIError:
@@ -696,7 +698,9 @@ class GiteaClient(BaseProviderClient):
             self.cache.set(cache_key, items)
         return items
 
-    def get_context(self, username: str, mode: str, repo_filters: dict[str, Any]) -> GitHubContext:
+    def get_context(
+        self, username: str, mode: str, repo_filters: dict[str, Any], include_graphql: bool = True
+    ) -> GitHubContext:
         user = self.get_user(username)
         authenticated_login = None
         viewer_mode = False
@@ -709,8 +713,8 @@ class GiteaClient(BaseProviderClient):
         repos = filter_repos(self.get_repos(username, viewer_mode=viewer_mode), repo_filters)
         user["public_repos"] = len(repos)
         events = self.get_events(username, limit=10)
-        heatmap = self.get_heatmap(username)
-        graphql = self._graphql_like_bundle(username, heatmap)
+        heatmap = self.get_heatmap(username) if include_graphql else []
+        graphql = self._graphql_like_bundle(username, heatmap) if include_graphql else {}
         return GitHubContext(
             target_user=username,
             user=user,
@@ -1152,7 +1156,9 @@ class BitbucketClient(BaseProviderClient):
             self.cache.set(cache_key, items)
         return items
 
-    def get_context(self, username: str, mode: str, repo_filters: dict[str, Any]) -> GitHubContext:
+    def get_context(
+        self, username: str, mode: str, repo_filters: dict[str, Any], include_graphql: bool = True
+    ) -> GitHubContext:
         user = self.get_user(username)
         repos = filter_repos(self.get_repos(username, viewer_mode=False), repo_filters)
         user["public_repos"] = len(repos)

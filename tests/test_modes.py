@@ -130,7 +130,7 @@ class ModesTests(unittest.TestCase):
     def test_compare_subcommand_renders_two_users(self, mock_client_factory: mock.Mock) -> None:
         instance = _configured_client(mock_client_factory)
 
-        def fake_context(username, mode, repo_filters):
+        def fake_context(username, mode, repo_filters, include_graphql):
             ctx = mock.Mock()
             ctx.user = {
                 "login": username,
