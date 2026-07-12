@@ -1161,13 +1161,9 @@ class BitbucketClient(BaseProviderClient):
         "gists",
         "recent_activity",
         "profile_readme",
-        "top_repos",
         "releases",
         "actions_status",
-        "repo_health",
-        "topics",
         "commit_cadence",
-        "maintainer_activity",
     }
     unsupported_reasons = {
         "contributions": "Bitbucket Cloud has no public profile contribution calendar API",
@@ -1187,6 +1183,10 @@ class BitbucketClient(BaseProviderClient):
         "security_advisories": "Bitbucket Cloud has no public repository advisory summary API",
         "packages": "Bitbucket Cloud has no matching public packages API",
         "contribution_breakdown": "Bitbucket Cloud has no profile contribution breakdown API",
+        "top_repos": "Bitbucket Cloud does not expose repository star counts for ranking",
+        "repo_health": "Bitbucket Cloud does not expose the repository metadata required for this summary",
+        "topics": "Bitbucket Cloud does not expose repository topics in this API",
+        "maintainer_activity": "Bitbucket Cloud does not expose repository star, fork, and issue totals in this API",
     }
 
     def __init__(self, token: str, cache: CacheStore, offline: bool, base_url: str) -> None:
@@ -1470,10 +1470,10 @@ class BitbucketClient(BaseProviderClient):
             "full_name": full_name,
             "description": raw.get("description"),
             "html_url": ((links.get("html") or {}).get("href")),
-            "stargazers_count": 0,
-            "forks_count": 0,
-            "watchers_count": 0,
-            "open_issues_count": 0,
+            "stargazers_count": None,
+            "forks_count": None,
+            "watchers_count": None,
+            "open_issues_count": None,
             "size": raw.get("size", 0),
             "language": language if language != "n/a" else None,
             "languages_url": f"bitbucket://language/{language}",

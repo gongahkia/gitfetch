@@ -94,6 +94,8 @@ class ProviderTests(unittest.TestCase):
         self.assertEqual(repo["full_name"], "workspace/repo")
         self.assertEqual(repo["language"], "Python")
         self.assertEqual(repo["languages_url"], "bitbucket://language/Python")
+        self.assertIsNone(repo["stargazers_count"])
+        self.assertFalse(client.supports_module("top_repos"))
 
     def test_unsupported_builtin_but_not_plugin_modules(self) -> None:
         client = BitbucketClient("", _cache(), False, "https://api.bitbucket.org/2.0")

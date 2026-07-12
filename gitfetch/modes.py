@@ -157,6 +157,10 @@ def _module_payload(modules: list[ModuleResult]) -> dict[str, Any]:
     return {module.name: module.data for module in modules if not module.hidden}
 
 
+def _metric_text(value: Any) -> str:
+    return "unavailable" if value is None else str(value)
+
+
 def _emit_mode_output(
     config: dict[str, Any],
     args: argparse.Namespace,
@@ -303,11 +307,11 @@ def handle_repo_command(args: argparse.Namespace) -> int:
     modules.append(ModuleResult("identity", "Repository", identity_lines, repo))
 
     stats_lines = [
-        f"stars: {repo.get('stargazers_count', 0)}",
-        f"forks: {repo.get('forks_count', 0)}",
-        f"watchers: {repo.get('subscribers_count', repo.get('watchers_count', 0))}",
-        f"open issues: {repo.get('open_issues_count', 0)}",
-        f"size: {repo.get('size', 0)} KB",
+        f"stars: {_metric_text(repo.get('stargazers_count', 0))}",
+        f"forks: {_metric_text(repo.get('forks_count', 0))}",
+        f"watchers: {_metric_text(repo.get('subscribers_count', repo.get('watchers_count', 0)))}",
+        f"open issues: {_metric_text(repo.get('open_issues_count', 0))}",
+        f"size: {_metric_text(repo.get('size', 0))} KB",
     ]
     if repo.get("pushed_at"):
         stats_lines.append(f"last push: {repo['pushed_at']}")
@@ -374,17 +378,24 @@ def handle_org_command(args: argparse.Namespace) -> int:
     if org.get("email"):
         identity_lines.append(f"email: {org['email']}")
 
-    total_stars = sum(r.get("stargazers_count", 0) for r in repos)
     public_repos = org.get("public_repos") or len(repos)
     stats_lines = [
         f"public repos: {public_repos}",
         f"members shown: {len(members)}",
-        f"total stars: {total_stars}",
         f"followers: {org.get('followers', 0)}",
     ]
+    if all(repo.get("stargazers_count") is not None for repo in repos):
+        total_stars = sum(repo["stargazers_count"] for repo in repos)
+        stats_lines.insert(2, f"total stars: {total_stars}")
+    else:
+        stats_lines.insert(2, "total stars: unavailable")
 
-    sorted_repos = sorted(repos, key=lambda r: r.get("stargazers_count", 0), reverse=True)[:args.repos_limit]
-    repo_lines = [f"{r.get('name')} ({r.get('language') or 'n/a'}, ★{r.get('stargazers_count', 0)})" for r in sorted_repos]
+    sorted_repos = sorted(repos, key=lambda r: r.get("stargazers_count") or 0, reverse=True)[:args.repos_limit]
+    repo_lines = [
+        f"{r.get('name')} ({r.get('language') or 'n/a'}, "
+        f"★{_metric_text(r.get('stargazers_count'))})"
+        for r in sorted_repos
+    ]
     member_lines = [m.get("login", "?") for m in members]
 
     modules = [
