@@ -19,6 +19,7 @@ class BaseProviderClient:
     provider_title = "Provider"
     supported_modules: set[str] = {"identity", "stats"}
     token_required_modules: set[str] = set()
+    language_breakdown_unit = "bytes"
     unsupported_reasons: dict[str, str] = {}
 
     def __init__(self, token: str, cache: CacheStore, offline: bool, base_url: str) -> None:
@@ -1149,6 +1150,9 @@ class CodebergClient(GiteaClient):
 class BitbucketClient(BaseProviderClient):
     provider_name = "bitbucket"
     provider_title = "Bitbucket"
+    # Bitbucket Cloud exposes a repository's primary language but not a
+    # language-by-byte endpoint, so never present repository counts as bytes.
+    language_breakdown_unit = "repositories"
     supported_modules = {
         "identity",
         "stats",

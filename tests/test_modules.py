@@ -7,6 +7,7 @@ from gitfetch.config import ConfigError
 from gitfetch.modules import MODULE_HANDLERS, available_module_metadata, load_plugin_modules
 from gitfetch.modules.builtin import (
     SPARKLINE_BLOCKS,
+    module_languages,
     module_pinned,
     module_pull_requests,
     module_rate_limit,
@@ -43,6 +44,16 @@ class ModuleTests(unittest.TestCase):
             path.write_text("MODULES = {'identity': lambda config, context, client: ['bad']}\n", encoding="utf-8")
             with self.assertRaises(ConfigError):
                 load_plugin_modules({"plugins": {"paths": [str(path)]}})
+
+    def test_bitbucket_languages_are_labelled_as_repository_counts(self) -> None:
+        context = mock.Mock(repos=[{"languages_url": "bitbucket://language/Python"}])
+        client = mock.Mock(language_breakdown_unit="repositories")
+        client.get_languages.return_value = {"Python": 1}
+        config = {"modules": {"languages": {"limit": 5, "workers": 1}}}
+        result = module_languages(config, context, client)
+        self.assertEqual(result.title, "Languages (Repo Count)")
+        self.assertEqual(result.lines, ["Python 1 repo(s)"])
+        self.assertEqual(result.data, [{"language": "Python", "repositories": 1}])
 
     def test_streaks_computes_current_and_longest(self) -> None:
         days = [
