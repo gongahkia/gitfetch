@@ -19,6 +19,12 @@ class ProviderTests(unittest.TestCase):
         self.assertIsNone(format_relative_days("2024-01-01T00:00:00"))
         self.assertEqual(format_relative_days("2999-01-01T00:00:00+00:00"), "0 days ago")
 
+    def test_clients_retry_transient_get_responses(self) -> None:
+        client = GitHubClient("", _cache(), False)
+        retries = client.session.get_adapter("https://").max_retries
+        self.assertEqual(retries.total, 2)
+        self.assertIn(429, retries.status_forcelist)
+
     def test_github_enterprise_uses_its_own_graphql_endpoint(self) -> None:
         client = GitHubClient("token", _cache(), False, "https://github.example/api/v3")
         self.assertEqual(client._graphql_url(), "https://github.example/api/graphql")

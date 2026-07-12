@@ -11,7 +11,7 @@ import requests
 
 from gitfetch.cache import CacheStore
 from gitfetch.config import ConfigError, MODULE_METADATA, SUPPORTED_PROVIDERS
-from gitfetch.github_api import GitHubAPIError, GitHubClient, GitHubContext, filter_repos
+from gitfetch.github_api import GitHubAPIError, GitHubClient, GitHubContext, configure_http_retries, filter_repos
 
 
 class BaseProviderClient:
@@ -28,6 +28,7 @@ class BaseProviderClient:
         self.offline = offline
         self.base_url = base_url.rstrip("/")
         self.session = requests.Session()
+        configure_http_retries(self.session)
         self.session.headers.update({"User-Agent": "gitfetch/2.0.0"})
 
     def supports_module(self, name: str) -> bool:
