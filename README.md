@@ -55,7 +55,7 @@ $ cd gitfetch/installer
 $ ./mainInstall.sh
 ```
 
-2. Then execute any of the below commands once to intialise and store your `Gitfetch` config globally on your machine.
+2. Then use any of the below commands to render a profile. `--user` applies only to that run; use `gitfetch config wizard` below to save a default profile globally.
 
 ```console
 $ gitfetch # uses saved username
