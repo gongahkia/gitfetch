@@ -160,7 +160,7 @@ $ gitfetch --set repo_filters.exclude_forks=false
 Plugin modules are local Python files that expose `register()` or `MODULES`. Add plugin paths and enabled plugin module names to `config.toml`.
 
 ```console
-$ gitfetch --set 'plugins.paths=["./my_gitfetch_plugin.py"]' --set 'plugins.modules=["my_metric"]'
+$ gitfetch --set 'plugins.paths=["./my_gitfetch_plugin.py"]' --set 'plugins.modules=["my_metric"]' --set plugins.allow_unsafe=true
 ```
 
 A minimal plugin looks like this.
