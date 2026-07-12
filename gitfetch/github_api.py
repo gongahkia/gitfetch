@@ -34,7 +34,9 @@ def configure_http_retries(session: requests.Session) -> None:
 
 
 class GitHubAPIError(RuntimeError):
-    pass
+    def __init__(self, message: str, *, rate_limited: bool = False) -> None:
+        super().__init__(message)
+        self.rate_limited = rate_limited
 
 
 @dataclass
@@ -121,11 +123,24 @@ class GitHubClient:
     def module_token_required(self, name: str, default: bool) -> bool:
         return default
 
+    def _rate_limit_error(self, response: requests.Response) -> GitHubAPIError:
+        reset = response.headers.get("X-RateLimit-Reset")
+        suffix = ""
+        if reset and reset.isdigit():
+            wait_seconds = max(0, int(reset) - int(time.time()))
+            suffix = f"; retry in {wait_seconds // 60}m {wait_seconds % 60}s"
+        return GitHubAPIError(
+            f"GitHub rate limited request: {response.json().get('message', '')}{suffix}",
+            rate_limited=True,
+        )
+
     def _get_json(self, path: str, params: dict[str, Any] | None = None, cache_key: str | None = None) -> Any:
+        stale = None
         if cache_key:
             cached = self.cache.get(cache_key)
             if cached is not None:
                 return cached
+            stale = self.cache.get(cache_key, allow_expired=True)
         if self.offline:
             raise GitHubAPIError(f"offline mode: {path} not available in cache")
         response = self.session.get(f"{self.base_url}{path}", params=params, timeout=20)
@@ -134,7 +149,11 @@ class GitHubClient:
         if response.status_code == 401:
             raise GitHubAPIError("GitHub authentication failed")
         if response.status_code == 403:
-            raise GitHubAPIError(f"GitHub rate limited request: {response.json().get('message', '')}")
+            if response.headers.get("X-RateLimit-Remaining") == "0":
+                if stale is not None:
+                    return stale
+                raise self._rate_limit_error(response)
+            raise GitHubAPIError(f"GitHub request forbidden: {response.json().get('message', '')}")
         if not response.ok:
             raise GitHubAPIError(f"GitHub API returned HTTP {response.status_code}")
         payload = response.json()
@@ -157,10 +176,12 @@ class GitHubClient:
             return default
 
     def _paginate(self, path: str, params: dict[str, Any] | None = None, cache_key: str | None = None) -> list[dict[str, Any]]:
+        stale = None
         if cache_key:
             cached = self.cache.get(cache_key)
             if cached is not None:
                 return cached
+            stale = self.cache.get(cache_key, allow_expired=True)
         if self.offline:
             raise GitHubAPIError(f"offline mode: {path} not available in cache")
         merged_params = dict(params or {})
@@ -169,7 +190,12 @@ class GitHubClient:
         items: list[dict[str, Any]] = []
         while True:
             merged_params["page"] = page
-            batch = self._get_json(path, params=merged_params)
+            try:
+                batch = self._get_json(path, params=merged_params)
+            except GitHubAPIError as exc:
+                if exc.rate_limited and stale is not None:
+                    return stale
+                raise
             if not isinstance(batch, list) or not batch:
                 break
             items.extend(batch)

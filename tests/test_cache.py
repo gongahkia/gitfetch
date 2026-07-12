@@ -7,6 +7,13 @@ from gitfetch.cache import CacheStore
 
 
 class CacheStoreTests(unittest.TestCase):
+    def test_expired_entries_can_be_requested_as_stale_fallbacks(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache = CacheStore(Path(tmpdir), enabled=True, ttl_seconds=0)
+            cache.set("response", {"cached": True})
+            self.assertIsNone(cache.get("response"))
+            self.assertEqual(cache.get("response", allow_expired=True), {"cached": True})
+
     def test_cache_files_and_directory_are_private(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             directory = Path(tmpdir) / "cache"

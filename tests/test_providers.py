@@ -19,6 +19,18 @@ class ProviderTests(unittest.TestCase):
         self.assertIsNone(format_relative_days("2024-01-01T00:00:00"))
         self.assertEqual(format_relative_days("2999-01-01T00:00:00+00:00"), "0 days ago")
 
+    def test_github_rate_limit_uses_stale_cached_response(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache = CacheStore(Path(tmpdir), enabled=True, ttl_seconds=0)
+            client = GitHubClient("", cache, False)
+            key = client._cache_key("user", "alice")
+            cache.set(key, {"login": "cached"})
+            response = mock.Mock(status_code=403, ok=False)
+            response.headers = {"X-RateLimit-Remaining": "0", "X-RateLimit-Reset": "9999999999"}
+            response.json.return_value = {"message": "rate limit exceeded"}
+            with mock.patch.object(client.session, "get", return_value=response):
+                self.assertEqual(client._get_json("/users/alice", cache_key=key), {"login": "cached"})
+
     def test_context_skips_graphql_when_no_graphql_module_is_selected(self) -> None:
         client = GitHubClient("token", _cache(), False)
         with mock.patch.object(client, "get_user", return_value={"login": "alice"}), mock.patch.object(

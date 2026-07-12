@@ -26,7 +26,7 @@ class CacheStore:
         digest = hashlib.sha256(key.encode("utf-8")).hexdigest()
         return self.directory / f"{digest}.json"
 
-    def get(self, key: str) -> Any | None:
+    def get(self, key: str, allow_expired: bool = False) -> Any | None:
         if not self.enabled or self.bypass_read:
             return None
         path = self._path_for(key)
@@ -36,7 +36,7 @@ class CacheStore:
             payload = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             return None
-        if payload.get("expires_at", 0) < time.time():
+        if not allow_expired and payload.get("expires_at", 0) < time.time():
             return None
         return payload.get("value")
 
