@@ -1129,11 +1129,23 @@ class BitbucketClient(BaseProviderClient):
         "maintainer_activity": "Bitbucket Cloud does not expose repository star, fork, and issue totals in this API",
     }
 
-    def __init__(self, token: str, cache: CacheStore, offline: bool, base_url: str) -> None:
+    def __init__(
+        self,
+        token: str,
+        cache: CacheStore,
+        offline: bool,
+        base_url: str,
+        auth_mode: str = "bearer",
+        auth_username: str = "",
+    ) -> None:
         super().__init__(token, cache, offline, base_url)
         self.session.headers.update({"Accept": "application/json"})
         if token:
-            self.session.headers["Authorization"] = f"Bearer {token}"
+            if auth_mode == "basic":
+                encoded = base64.b64encode(f"{auth_username}:{token}".encode("utf-8")).decode("ascii")
+                self.session.headers["Authorization"] = f"Basic {encoded}"
+            else:
+                self.session.headers["Authorization"] = f"Bearer {token}"
 
     def _paginate(self, path: str, params: dict[str, Any] | None = None, cache_key: str | None = None) -> list[dict[str, Any]]:
         if cache_key:
@@ -1512,7 +1524,15 @@ def create_provider_client(config: dict[str, Any], token: str, cache: CacheStore
     if provider == "gitlab":
         return GitLabClient(token=token, cache=cache, offline=offline, base_url=base_url)
     if provider == "bitbucket":
-        return BitbucketClient(token=token, cache=cache, offline=offline, base_url=base_url)
+        settings = config.get("providers", {}).get("bitbucket", {})
+        return BitbucketClient(
+            token=token,
+            cache=cache,
+            offline=offline,
+            base_url=base_url,
+            auth_mode=str(settings.get("auth_mode", "bearer")),
+            auth_username=str(settings.get("auth_username", "")),
+        )
     if provider == "gitea":
         return GiteaClient(token=token, cache=cache, offline=offline, base_url=base_url)
     if provider == "forgejo":
