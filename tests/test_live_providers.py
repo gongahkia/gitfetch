@@ -75,6 +75,23 @@ class LiveProviderSmokeTests(unittest.TestCase):
         self.assertTrue(context.viewer_mode)
         self.assertEqual(context.authenticated_login.lower(), username.lower())
 
+    def test_gitea_authenticated_viewer_context(self) -> None:
+        token = os.environ.get("GITFETCH_LIVE_GITEA_TOKEN")
+        username = os.environ.get("GITFETCH_LIVE_GITEA_USER")
+        if not token or not username:
+            self.skipTest("set GITFETCH_LIVE_GITEA_USER and GITFETCH_LIVE_GITEA_TOKEN")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config = preset_config("minimal")
+            config["profile"]["provider"] = "gitea"
+            client = create_provider_client(
+                config,
+                token=token,
+                cache=CacheStore(Path(tmpdir), enabled=False, ttl_seconds=0),
+            )
+            context = client.get_context(username, "viewer", config["repo_filters"], include_graphql=False)
+        self.assertTrue(context.viewer_mode)
+        self.assertEqual(context.authenticated_login.lower(), username.lower())
+
     def test_bitbucket_authenticated_workspace_context(self) -> None:
         token = os.environ.get("GITFETCH_LIVE_BITBUCKET_TOKEN")
         workspace = os.environ.get("GITFETCH_LIVE_BITBUCKET_USER")
