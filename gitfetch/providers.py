@@ -241,7 +241,7 @@ class GitLabClient(BaseProviderClient):
         events = [] if is_group else self.get_events(str(raw_user["id"]), limit=10)
         # GitLab's public GraphQL API has no stable equivalent of GitHub's
         # profile contribution calendar. Do not manufacture one from events.
-        graphql = {}
+        graphql: dict[str, Any] = {}
         return GitHubContext(
             target_user=username,
             user=user,
@@ -605,7 +605,7 @@ class GitLabClient(BaseProviderClient):
     def _normalize_event(self, raw: dict[str, Any]) -> dict[str, Any]:
         action = str(raw.get("action_name") or raw.get("target_type") or "Event")
         event_type = "PushEvent" if "push" in action.lower() else action.replace(" ", "_")
-        commits = [{}] * int((raw.get("push_data") or {}).get("commit_count", 0) or 0)
+        commits: list[dict[str, Any]] = [{}] * int((raw.get("push_data") or {}).get("commit_count", 0) or 0)
         return {
             **raw,
             "type": event_type,
@@ -1142,7 +1142,7 @@ class BitbucketClient(BaseProviderClient):
                 return cached
         if self.offline:
             raise GitHubAPIError(f"offline mode: {path} not available in cache")
-        url = self._url(path)
+        url: str | None = self._url(path)
         merged = dict(params or {})
         merged.setdefault("pagelen", 100)
         items: list[dict[str, Any]] = []

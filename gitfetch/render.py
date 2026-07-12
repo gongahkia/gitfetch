@@ -74,7 +74,7 @@ def color_enabled(config: dict[str, Any], output_format: str) -> bool:
     return True
 
 
-def palette_for(config: dict[str, Any]) -> dict[str, int]:
+def palette_for(config: dict[str, Any]) -> dict[str, ThemeValue]:
     name = config["display"].get("theme", "default")
     return THEMES.get(name, THEMES["default"])
 
@@ -176,7 +176,7 @@ def apply_margin(text: str, margin: int) -> str:
     return "\n".join(pad + line for line in text.split("\n"))
 
 
-def module_lines(modules: list[ModuleResult], color_enabled: bool, palette: dict[str, int]) -> list[str]:
+def module_lines(modules: list[ModuleResult], color_enabled: bool, palette: dict[str, ThemeValue]) -> list[str]:
     lines: list[str] = []
     for module in modules:
         lines.append(colorize(module.title, palette["title"], color_enabled))
@@ -192,7 +192,7 @@ def module_lines(modules: list[ModuleResult], color_enabled: bool, palette: dict
 _KEY_VALUE_RE = re.compile(r"^([A-Za-z][\w \-]*?):\s+(.+)$")
 
 
-def _paint_value_line(line: str, color_enabled: bool, palette: dict[str, int]) -> str:
+def _paint_value_line(line: str, color_enabled: bool, palette: dict[str, ThemeValue]) -> str:
     if not color_enabled or not line:
         return line
     match = _KEY_VALUE_RE.match(line)
@@ -286,7 +286,7 @@ def _render_halfblock(img: Image.Image, width: int, aspect: float, color_mode: s
                 else:
                     parts.append(" ")
             else:
-                parts.append(f"{_fg(*top, mode=color_mode)}{_bg(*bot, mode=color_mode)}▀")
+                parts.append(f"{_fg(top[0], top[1], top[2], color_mode)}{_bg(bot[0], bot[1], bot[2], color_mode)}▀")
         if color_mode != "none":
             parts.append("\x1b[0m")
         lines.append("".join(parts))

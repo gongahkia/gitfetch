@@ -102,7 +102,9 @@ def module_languages(config: dict[str, Any], context: GitHubContext, client: Git
     workers = max(1, int(settings.get("workers", 4)))
     max_repos = int(settings.get("max_repos", 40))
     totals: dict[str, int] = {}
-    all_urls = [repo.get("languages_url") for repo in context.repos if repo.get("languages_url")]
+    all_urls: list[str] = [
+        url for repo in context.repos if isinstance((url := repo.get("languages_url")), str)
+    ]
     urls = all_urls if max_repos == 0 else all_urls[:max_repos]
 
     def add_payload(payload: dict[str, int]) -> None:
@@ -300,10 +302,10 @@ def _split_full_name(repo: dict[str, Any]) -> tuple[str, str] | None:
     if isinstance(full_name, str) and "/" in full_name:
         owner, name = full_name.split("/", 1)
         return owner, name
-    owner = (repo.get("owner") or {}).get("login")
-    name = repo.get("name")
-    if owner and name:
-        return owner, name
+    owner_value = (repo.get("owner") or {}).get("login")
+    name_value = repo.get("name")
+    if isinstance(owner_value, str) and isinstance(name_value, str) and owner_value and name_value:
+        return owner_value, name_value
     return None
 
 
