@@ -1,3 +1,4 @@
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -10,6 +11,16 @@ class ConfigTests(unittest.TestCase):
         config = preset_config("showcase")
         self.assertTrue(config["modules"]["showcase"]["enabled"])
         self.assertEqual(config["modules"]["order"][0], "identity")
+
+    def test_write_config_is_private_and_atomic(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "nested" / "config.toml"
+            config = preset_config("minimal")
+            write_config(path, config)
+            self.assertEqual(os.stat(path.parent).st_mode & 0o777, 0o700)
+            self.assertEqual(os.stat(path).st_mode & 0o777, 0o600)
+            self.assertEqual(load_config(path)["display"]["avatar"], False)
+            self.assertFalse(list(path.parent.glob(".config.toml.*")))
 
     def test_write_and_load_round_trip(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

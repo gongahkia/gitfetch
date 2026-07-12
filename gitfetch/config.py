@@ -1,6 +1,7 @@
 import copy
 import json
 import os
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -619,8 +620,28 @@ def _coerce_value(value: str) -> Any:
 
 
 def write_config(path: Path, config: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(to_toml(config).rstrip() + "\n", encoding="utf-8")
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    try:
+        path.parent.chmod(0o700)
+    except OSError:
+        pass
+    temporary_path: str | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            "w", encoding="utf-8", dir=path.parent, prefix=f".{path.name}.", delete=False
+        ) as temporary:
+            temporary.write(to_toml(config).rstrip() + "\n")
+            temporary.flush()
+            os.fsync(temporary.fileno())
+            temporary_path = temporary.name
+        os.chmod(temporary_path, 0o600)
+        os.replace(temporary_path, path)
+    finally:
+        if temporary_path:
+            try:
+                os.unlink(temporary_path)
+            except FileNotFoundError:
+                pass
 
 
 def to_toml(config: dict[str, Any]) -> str:
