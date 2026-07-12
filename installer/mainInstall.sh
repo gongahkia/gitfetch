@@ -8,15 +8,25 @@ ENDCOLOR="\e[0m"
 
 printf "${BLUE}gitfetch installer${ENDCOLOR}\n"
 
-if ! command -v pip3 &> /dev/null; then
-    printf "${RED}pip3 not found${ENDCOLOR}. Please install Python 3 and pip first.\n"
+if ! command -v python3 &> /dev/null; then
+    printf "${RED}python3 not found${ENDCOLOR}. Please install Python 3.10+ and pip first.\n"
+    exit 1
+fi
+
+PYTHON_BIN=$(command -v python3)
+if ! "$PYTHON_BIN" -m pip --version &> /dev/null; then
+    printf "${RED}pip not found for python3${ENDCOLOR}. Please install pip for Python 3.10+.\n"
+    exit 1
+fi
+if ! "$PYTHON_BIN" -c 'import sys; raise SystemExit(sys.version_info < (3, 10))'; then
+    printf "${RED}Python 3.10+ is required${ENDCOLOR}.\n"
     exit 1
 fi
 
 if [[ -n "$VIRTUAL_ENV" ]]; then
-    pip3 install git+https://github.com/gongahkia/gitfetch.git
+    "$PYTHON_BIN" -m pip install git+https://github.com/gongahkia/gitfetch.git
 else
-    pip3 install --user git+https://github.com/gongahkia/gitfetch.git
+    "$PYTHON_BIN" -m pip install --user git+https://github.com/gongahkia/gitfetch.git
 fi
 
 # detect shell and add to PATH if needed
@@ -27,8 +37,9 @@ case "$SHELL_NAME" in
     *)    RC_FILE="$HOME/.bashrc" ;;
 esac
 
-PIP_BIN=$(python3 -m site --user-base)/bin
-if ! grep -q "$PIP_BIN" "$RC_FILE" 2>/dev/null; then
+mkdir -p "$(dirname "$RC_FILE")"
+PIP_BIN=$("$PYTHON_BIN" -m site --user-base)/bin
+if ! grep -Fq "$PIP_BIN" "$RC_FILE" 2>/dev/null; then
     if [[ "$SHELL_NAME" == "fish" ]]; then
         echo "set -gx PATH $PIP_BIN \$PATH" >> "$RC_FILE"
     else
