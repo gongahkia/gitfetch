@@ -64,10 +64,12 @@ class BaseProviderClient:
         return response.text[:120]
 
     def _get_json(self, path: str, params: dict[str, Any] | None = None, cache_key: str | None = None) -> Any:
+        stale = None
         if cache_key:
             cached = self.cache.get(cache_key)
             if cached is not None:
                 return cached
+            stale = self.cache.get(cache_key, allow_expired=True)
         if self.offline:
             raise GitHubAPIError(f"offline mode: {path} not available in cache")
         response = self.session.get(self._url(path), params=params, timeout=20)
@@ -75,7 +77,12 @@ class BaseProviderClient:
             raise GitHubAPIError(f"{self.provider_title} user or resource not found")
         if response.status_code == 401:
             raise GitHubAPIError(f"{self.provider_title} authentication failed")
-        if response.status_code == 403:
+        if response.status_code in {403, 429}:
+            rate_limited = response.status_code == 429 or response.headers.get("X-RateLimit-Remaining") == "0"
+            if rate_limited and stale is not None:
+                return stale
+            if rate_limited:
+                raise GitHubAPIError(f"{self.provider_title} rate limited request: {self._message(response)}", rate_limited=True)
             raise GitHubAPIError(f"{self.provider_title} rejected request: {self._message(response)}")
         if not response.ok:
             raise GitHubAPIError(f"{self.provider_title} API returned HTTP {response.status_code}")
