@@ -2,6 +2,7 @@ import base64
 import hashlib
 import time
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any
 
 import requests
@@ -503,9 +504,11 @@ def format_relative_days(timestamp: str | None) -> str | None:
     if not timestamp:
         return None
     try:
-        parsed = time.strptime(timestamp.replace("Z", "+0000"), "%Y-%m-%dT%H:%M:%S%z")
+        parsed = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
     except ValueError:
         return None
-    seconds = time.time() - time.mktime(parsed)
+    if parsed.tzinfo is None:
+        return None
+    seconds = (datetime.now(timezone.utc) - parsed.astimezone(timezone.utc)).total_seconds()
     days = int(max(seconds, 0) // 86400)
     return f"{days} days ago"
