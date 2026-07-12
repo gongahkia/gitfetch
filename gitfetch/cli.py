@@ -4,6 +4,8 @@ import argparse
 import sys
 from pathlib import Path
 
+import requests
+
 from gitfetch import __version__
 from gitfetch.cache import CacheStore
 from gitfetch.config import (
@@ -149,6 +151,9 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     except GitHubAPIError as exc:
         print(f"api error: {exc}", file=sys.stderr)
+        return 1
+    except requests.RequestException as exc:
+        print(f"network error: {exc}", file=sys.stderr)
         return 1
 
 

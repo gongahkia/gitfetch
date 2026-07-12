@@ -5,6 +5,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+import requests
+
 from gitfetch.cli import main
 
 
@@ -130,6 +132,20 @@ class CLITests(unittest.TestCase):
             with contextlib.redirect_stdout(stdout):
                 self.assertEqual(main(["--config", str(path), "--no-avatar", "--no-color", "--format", "plain"]), 0)
             self.assertIn("requires --token", stdout.getvalue())
+
+    @mock.patch("gitfetch.cli.create_provider_client")
+    def test_network_failure_is_reported_without_a_traceback(self, mock_client_factory) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "config.toml"
+            self.assertEqual(main(["--config", str(path), "config", "init", "--preset", "minimal"]), 0)
+            path.write_text(path.read_text(encoding="utf-8").replace('username = ""', 'username = "octocat"'), encoding="utf-8")
+            client = _fake_client()
+            client.get_context.side_effect = requests.ConnectionError("connection refused")
+            mock_client_factory.return_value = client
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                self.assertEqual(main(["--config", str(path), "--no-avatar", "--no-color"]), 1)
+            self.assertIn("network error: connection refused", stderr.getvalue())
 
     @mock.patch("gitfetch.cli.create_provider_client")
     def test_provider_override_reaches_factory(self, mock_client_factory) -> None:
