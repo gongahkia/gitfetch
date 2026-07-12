@@ -6,6 +6,7 @@ from unittest import mock
 
 from gitfetch.cache import CacheStore
 from gitfetch.config import ConfigError, get_token, preset_config
+from gitfetch.github_api import GitHubClient
 from gitfetch.providers import BitbucketClient, CodebergClient, ForgejoClient, GiteaClient, GitLabClient, create_provider_client
 
 
@@ -14,6 +15,14 @@ def _cache() -> CacheStore:
 
 
 class ProviderTests(unittest.TestCase):
+    def test_github_enterprise_uses_its_own_graphql_endpoint(self) -> None:
+        client = GitHubClient("token", _cache(), False, "https://github.example/api/v3")
+        self.assertEqual(client._graphql_url(), "https://github.example/api/graphql")
+        self.assertEqual(
+            GitHubClient("token", _cache(), False, "https://api.github.com")._graphql_url(),
+            "https://api.github.com/graphql",
+        )
+
     def test_factory_selects_provider_and_base_url(self) -> None:
         config = preset_config("minimal")
         config["profile"]["provider"] = "gitlab"
