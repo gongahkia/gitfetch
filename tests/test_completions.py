@@ -26,12 +26,14 @@ class CompletionsTests(unittest.TestCase):
         self.assertIn("ansi plain json svg card", out)
         self.assertIn("contributors-limit", out)
         self.assertIn("token-command", out)
+        self.assertIn("__gitfetch_profiles", out)
 
     def test_bash_completion_includes_nested_commands(self) -> None:
         out = script_for("bash")
         self.assertIn("init wizard path validate profiles", out)
         self.assertIn("store get status delete", out)
         self.assertIn("--contributors-limit", out)
+        self.assertIn("_gitfetch_profile_names", out)
 
     def test_bash_script_has_valid_syntax(self) -> None:
         bash = shutil.which("bash")

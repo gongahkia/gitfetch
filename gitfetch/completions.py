@@ -26,6 +26,10 @@ PROVIDER_VALUES = SUPPORTED_PROVIDERS
 
 
 BASH = """\
+_gitfetch_profile_names() {{
+    gitfetch config profiles list 2>/dev/null | awk 'NF >= 2 {{ print $1 }}'
+}}
+
 _gitfetch_completions() {{
     local cur prev cmds opts
     cur="${{COMP_WORDS[COMP_CWORD]}}"
@@ -39,6 +43,7 @@ _gitfetch_completions() {{
         --avatar-style)  COMPREPLY=( $(compgen -W "{styles}" -- "$cur") ); return ;;
         --avatar-color)  COMPREPLY=( $(compgen -W "{colors}" -- "$cur") ); return ;;
         --mode)          COMPREPLY=( $(compgen -W "{modes}" -- "$cur") ); return ;;
+        --profile)       COMPREPLY=( $(compgen -W "$(_gitfetch_profile_names)" -- "$cur") ); return ;;
         completions)     COMPREPLY=( $(compgen -W "bash zsh fish" -- "$cur") ); return ;;
     esac
     if [[ "$cur" == --* ]]; then
@@ -62,6 +67,7 @@ _gitfetch_completions() {{
                 profiles)
                     case "${{COMP_WORDS[3]}}" in
                         set) COMPREPLY=( $(compgen -W "--user --provider --mode --token-env --token-command" -- "$cur") ) ;;
+                        remove) COMPREPLY=( $(compgen -W "$(_gitfetch_profile_names)" -- "$cur") ) ;;
                         *) COMPREPLY=( $(compgen -W "list set remove" -- "$cur") ) ;;
                     esac ;;
                 *) COMPREPLY=( $(compgen -W "init wizard path validate profiles" -- "$cur") ) ;;
@@ -82,6 +88,12 @@ complete -F _gitfetch_completions gitfetch
 
 ZSH = """\
 #compdef gitfetch
+_gitfetch_profiles() {{
+    local -a profiles
+    profiles=(${{(f)"$(gitfetch config profiles list 2>/dev/null | awk 'NF >= 2 {{ print $1 }}')"}})
+    _describe -t profiles 'saved profile' profiles
+}}
+
 _gitfetch() {{
     local -a cmds
     cmds=({commands_zsh})
@@ -89,7 +101,7 @@ _gitfetch() {{
         '--user[Provider username or workspace]:user:' \\
         '--provider[Git provider]:provider:({providers})' \\
         '--base-url[Provider API base URL]:url:' \\
-        '--profile[Saved profile name]:profile:' \\
+        '--profile[Saved profile name]:profile:_gitfetch_profiles' \\
         '--token[Provider token]:token:' \\
         '--mode[Profile mode]:mode:({modes})' \\
         '--config[Path to config.toml]:file:_files' \\
@@ -120,6 +132,7 @@ _gitfetch() {{
                     profiles)
                         case $words[4] in
                             set) _arguments '--user[profile user]:user:' '--provider[provider]:provider:({providers})' '--mode[mode]:mode:({modes})' '--token-env[token env]:env:' '--token-command[token command]:command:' ;;
+                            remove) _gitfetch_profiles ;;
                             *) _values 'profile command' list set remove ;;
                         esac ;;
                     *) _values 'config command' init wizard path validate profiles ;;
@@ -143,11 +156,15 @@ compdef _gitfetch gitfetch
 
 
 FISH = """\
+function __gitfetch_profiles
+    gitfetch config profiles list 2>/dev/null | string match -r '^[^ ]+'
+end
+
 complete -c gitfetch -n "__fish_use_subcommand" -a "{commands}"
 complete -c gitfetch -l user -x -d "Provider username or workspace"
 complete -c gitfetch -l provider -x -a "{providers}" -d "Git provider"
 complete -c gitfetch -l base-url -x -d "Provider API base URL"
-complete -c gitfetch -l profile -x -d "Saved profile name"
+complete -c gitfetch -l profile -x -a "(__gitfetch_profiles)" -d "Saved profile name"
 complete -c gitfetch -l token -x -d "Provider token"
 complete -c gitfetch -l mode -x -a "{modes}" -d "Profile mode"
 complete -c gitfetch -l config -F -d "Path to config.toml"
@@ -171,6 +188,7 @@ complete -c gitfetch -n "__fish_seen_subcommand_from config; and __fish_seen_sub
 complete -c gitfetch -n "__fish_seen_subcommand_from config; and __fish_seen_subcommand_from init" -l force
 complete -c gitfetch -n "__fish_seen_subcommand_from config; and __fish_seen_subcommand_from wizard" -l force
 complete -c gitfetch -n "__fish_seen_subcommand_from config; and __fish_seen_subcommand_from profiles" -a "list set remove"
+complete -c gitfetch -n "__fish_seen_subcommand_from config; and __fish_seen_subcommand_from remove" -a "(__gitfetch_profiles)"
 complete -c gitfetch -n "__fish_seen_subcommand_from config; and __fish_seen_subcommand_from set" -l user -x
 complete -c gitfetch -n "__fish_seen_subcommand_from config; and __fish_seen_subcommand_from set" -l provider -x -a "{providers}"
 complete -c gitfetch -n "__fish_seen_subcommand_from config; and __fish_seen_subcommand_from set" -l mode -x -a "{modes}"
