@@ -40,6 +40,13 @@ class LiveProviderSmokeTests(unittest.TestCase):
                     base_url = os.environ.get(f"GITFETCH_LIVE_{provider.upper()}_BASE_URL")
                     if base_url:
                         config["providers"][provider]["base_url"] = base_url
+                    if provider == "bitbucket":
+                        config["providers"][provider]["auth_mode"] = os.environ.get(
+                            "GITFETCH_LIVE_BITBUCKET_AUTH_MODE", "bearer"
+                        )
+                        config["providers"][provider]["auth_username"] = os.environ.get(
+                            "GITFETCH_LIVE_BITBUCKET_AUTH_USERNAME", ""
+                        )
                     client = create_provider_client(
                         config,
                         token=os.environ.get(f"GITFETCH_LIVE_{provider.upper()}_TOKEN", ""),

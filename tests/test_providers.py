@@ -114,6 +114,10 @@ class ProviderTests(unittest.TestCase):
         self.assertEqual(project["languages_url"], "gitlab://project/42")
         self.assertEqual(project["topics"], ["cli"])
 
+    def test_bitbucket_supports_basic_api_tokens(self) -> None:
+        client = BitbucketClient("api-token", _cache(), False, "https://api.bitbucket.org/2.0", "basic", "alice")
+        self.assertEqual(client.session.headers["Authorization"], "Basic YWxpY2U6YXBpLXRva2Vu")
+
     def test_bitbucket_repo_normalization_matches_module_shape(self) -> None:
         client = BitbucketClient("", _cache(), False, "https://api.bitbucket.org/2.0")
         repo = client._normalize_repo(

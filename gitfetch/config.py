@@ -79,6 +79,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "bitbucket": {
             "base_url": "https://api.bitbucket.org/2.0",
             "token_env": "BITBUCKET_TOKEN",
+            "auth_mode": "bearer",
+            "auth_username": "",
         },
         "gitea": {
             "base_url": "https://gitea.com/api/v1",
@@ -505,6 +507,10 @@ def normalize_config(config: dict[str, Any]) -> None:
         provider_config.setdefault("token_env", default_provider["token_env"])
         if name == provider and not str(provider_config.get("base_url", "")).strip():
             raise ConfigError(f"providers.{name}.base_url must not be empty")
+        if name == "bitbucket" and provider_config.get("auth_mode") not in {"bearer", "basic"}:
+            raise ConfigError("providers.bitbucket.auth_mode must be 'bearer' or 'basic'")
+        if name == "bitbucket" and provider_config.get("auth_mode") == "basic" and not str(provider_config.get("auth_username", "")).strip():
+            raise ConfigError("providers.bitbucket.auth_username is required when auth_mode is 'basic'")
     if config["profile"].get("mode") not in {"public", "viewer"}:
         raise ConfigError("profile.mode must be 'public' or 'viewer'")
     if config["display"].get("layout") not in {"split", "stack"}:
