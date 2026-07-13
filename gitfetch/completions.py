@@ -95,6 +95,59 @@ _gitfetch_profiles() {{
 }}
 
 _gitfetch() {{
+    # Keep this deliberately direct rather than relying on nested _arguments
+    # state transitions, which vary across Zsh/framework versions.
+    local cur prev command subcommand
+    cur="${{words[CURRENT]}}"
+    prev="${{words[CURRENT-1]}}"
+    command="${{words[2]}}"
+    subcommand="${{words[3]}}"
+    case "$prev" in
+        --format) compadd -- {formats}; return ;;
+        --provider) compadd -- {providers}; return ;;
+        --theme) compadd -- {themes}; return ;;
+        --avatar-style) compadd -- {styles}; return ;;
+        --avatar-color) compadd -- {colors}; return ;;
+        --mode) compadd -- {modes}; return ;;
+        --profile) _gitfetch_profiles; return ;;
+    esac
+    if (( CURRENT == 2 )); then
+        compadd -- {commands} {flags}
+        return
+    fi
+    if [[ "$cur" == --* ]]; then
+        case "$command" in
+            repo) compadd -- {flags} --contributors-limit --commits-limit ;;
+            org) compadd -- {flags} --members-limit --repos-limit ;;
+            compare) compadd -- {flags} --column-width ;;
+            *) compadd -- {flags} ;;
+        esac
+        return
+    fi
+    case "$command" in
+        config)
+            case "$subcommand" in
+                init) compadd -- --preset --force ;;
+                wizard) compadd -- --force ;;
+                profiles)
+                    case "${{words[4]}}" in
+                        set) compadd -- --user --provider --mode --token-env --token-command ;;
+                        remove) _gitfetch_profiles ;;
+                        *) compadd -- list set remove ;;
+                    esac ;;
+                *) compadd -- init wizard path validate profiles ;;
+            esac ;;
+        modules) compadd -- list ;;
+        completions) compadd -- bash zsh fish ;;
+        token)
+            case "$subcommand" in
+                store) compadd -- --service --account --token ;;
+                get|status|delete) compadd -- --service --account ;;
+                *) compadd -- store get status delete ;;
+            esac ;;
+    esac
+    return
+
     local -a cmds
     cmds=({commands_zsh})
     _arguments -C \\
