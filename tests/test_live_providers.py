@@ -75,6 +75,22 @@ class LiveProviderSmokeTests(unittest.TestCase):
         self.assertTrue(context.viewer_mode)
         self.assertEqual(context.authenticated_login.lower(), username.lower())
 
+    def test_forgejo_compatible_context(self) -> None:
+        base_url = os.environ.get("GITFETCH_LIVE_FORGEJO_BASE_URL", "https://codeberg.org/api/v1")
+        username = os.environ.get("GITFETCH_LIVE_FORGEJO_USER", "forgejo")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config = preset_config("minimal")
+            config["profile"]["provider"] = "forgejo"
+            config["providers"]["forgejo"]["base_url"] = base_url
+            client = create_provider_client(
+                config,
+                token=os.environ.get("GITFETCH_LIVE_FORGEJO_TOKEN", ""),
+                cache=CacheStore(Path(tmpdir), enabled=False, ttl_seconds=0),
+            )
+            context = client.get_context(username, "public", config["repo_filters"], include_graphql=False)
+        self.assertTrue(context.user.get("login"))
+        self.assertIsInstance(context.repos, list)
+
     def test_gitea_authenticated_viewer_context(self) -> None:
         token = os.environ.get("GITFETCH_LIVE_GITEA_TOKEN")
         username = os.environ.get("GITFETCH_LIVE_GITEA_USER")
