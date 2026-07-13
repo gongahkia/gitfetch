@@ -118,6 +118,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "format": "ansi",
         "avatar_style": "ascii",
         "avatar_color": "auto",
+        "svg_font_family": "BigBlue Terminal 437, BigBlue Terminal Plus, monospace",
+        "card_language_icons": True,
     },
     "repo_filters": {
         "exclude_forks": True,

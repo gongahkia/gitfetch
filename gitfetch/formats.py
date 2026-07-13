@@ -8,6 +8,7 @@ from typing import Any, Iterator
 from PIL import Image, ImageDraw, ImageFont
 
 from gitfetch.images import fetch_avatar_image
+from gitfetch.language_icons import language_icon_data_uri, language_icon_image
 from gitfetch.modules.builtin import ModuleResult
 
 
@@ -102,7 +103,7 @@ def render_terminal_svg(text: str, config: dict[str, Any]) -> str:
     width = int(max_len * char_width + 32)
     height = int(len(raw_lines) * line_height + 32)
     parts: list[str] = [
-        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="{font_size}">',
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" font-family="{_xml_escape(config["display"].get("svg_font_family", "monospace"))}" font-size="{font_size}">',
         f'<rect width="{width}" height="{height}" fill="{background}"/>',
         f'<g fill="{foreground}">',
     ]
@@ -178,7 +179,7 @@ def render_card_svg(config: dict[str, Any], user: dict[str, Any], modules: list[
     avatar_data = _embed_avatar_data(user.get("avatar_url"), avatar_size) if config["display"].get("avatar", True) else None
 
     parts: list[str] = [
-        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" font-family="ui-sans-serif, -apple-system, Segoe UI, Roboto, sans-serif">',
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" font-family="{_xml_escape(config["display"].get("svg_font_family", "monospace"))}">',
         f'<rect width="{width}" height="{height}" rx="14" fill="{palette["background"]}" stroke="{palette["border"]}" stroke-width="1.5"/>',
     ]
     if avatar_data:
@@ -233,17 +234,25 @@ def render_card_svg(config: dict[str, Any], user: dict[str, Any], modules: list[
             f'<text x="32" y="220" fill="{palette["muted"]}" font-size="11" letter-spacing="1.2">LANGUAGES</text>'
         )
         x = 32
+        show_icons = bool(config["display"].get("card_language_icons", True))
         for entry in languages[:5]:
             label = _truncate(entry.get("language", "?"), 18)
-            pill_w = max(60, len(label) * 8 + 18)
+            icon_uri = language_icon_data_uri(label) if show_icons else None
+            pill_w = max(60, len(label) * 8 + 18 + (24 if icon_uri else 0))
             if x + pill_w > width - 32:
                 break
             parts.append(
                 f'<rect x="{x}" y="232" rx="10" ry="10" width="{pill_w}" height="22" fill="{palette["surface"]}" stroke="{palette["border"]}"/>'
             )
-            parts.append(
-                f'<text x="{x + pill_w // 2}" y="247" text-anchor="middle" fill="{palette["accent"]}" font-size="12">{_xml_escape(label)}</text>'
-            )
+            if icon_uri:
+                parts.append(f'<image href="{icon_uri}" x="{x + 6}" y="235" width="16" height="16"/>')
+                parts.append(
+                    f'<text x="{x + 28}" y="247" fill="{palette["accent"]}" font-size="12">{_xml_escape(label)}</text>'
+                )
+            else:
+                parts.append(
+                    f'<text x="{x + pill_w // 2}" y="247" text-anchor="middle" fill="{palette["accent"]}" font-size="12">{_xml_escape(label)}</text>'
+                )
             x += pill_w + 8
 
     pinned_lines = _module_lines_text(modules, "pinned")
@@ -315,13 +324,17 @@ def render_card_png(config: dict[str, Any], user: dict[str, Any], modules: list[
     if languages:
         draw.text((32, 216), "LANGUAGES", fill=palette["muted"], font=small_font)
         x = 32
+        show_icons = bool(config["display"].get("card_language_icons", True))
         for entry in languages[:5]:
             label = _truncate(entry.get("language", "?"), 18)
-            pill_w = max(60, len(label) * 8 + 18)
+            icon = language_icon_image(label, 16) if show_icons else None
+            pill_w = max(60, len(label) * 8 + 18 + (24 if icon else 0))
             if x + pill_w > width - 32:
                 break
             draw.rounded_rectangle((x, 232, x + pill_w, 254), radius=10, fill=palette["surface"], outline=palette["border"])
-            draw.text((x + 10, 237), label, fill=palette["accent"], font=small_font)
+            if icon:
+                img.paste(icon, (x + 6, 235), icon)
+            draw.text((x + (28 if icon else 10), 237), label, fill=palette["accent"], font=small_font)
             x += pill_w + 8
 
     pinned_lines = _module_lines_text(modules, "pinned")
@@ -348,7 +361,7 @@ def render_summary_card_svg(
     avatar_size = 72
     avatar_data = _embed_avatar_data(avatar_url, avatar_size) if avatar_url and config["display"].get("avatar", True) else None
     parts = [
-        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" font-family="ui-sans-serif, -apple-system, Segoe UI, Roboto, sans-serif">',
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" font-family="{_xml_escape(config["display"].get("svg_font_family", "monospace"))}">',
         f'<rect width="{width}" height="{height}" rx="14" fill="{palette["background"]}" stroke="{palette["border"]}" stroke-width="1.5"/>',
     ]
     text_x = 32
