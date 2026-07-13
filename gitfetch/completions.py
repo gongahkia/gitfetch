@@ -88,6 +88,11 @@ complete -F _gitfetch_completions gitfetch
 
 ZSH = """\
 #compdef gitfetch
+if ! (( $+functions[compdef] )); then
+    autoload -Uz compinit
+    compinit -i
+fi
+
 _gitfetch_profiles() {{
     local -a profiles
     profiles=(${{(f)"$(gitfetch config profiles list 2>/dev/null | awk 'NF >= 2 {{ print $1 }}')"}})
