@@ -4,7 +4,7 @@
 
 # `Gitfetch` 🛻
 
-Serving you snapshots of your [Git Provider](https://git-scm.com/) profile in the [CLI](https://en.wikipedia.org/wiki/Command-line_interface).
+Serving you snapshots of your [Git Provider](https://git-scm.com/) profile in the [CLI](https://en.wikipedia.org/wiki/Command-line_interface) at [blazingly fast](https://news.ycombinator.com/item?id=23874245) speeds.
 
 ## Stack
 
@@ -19,29 +19,44 @@ Serving you snapshots of your [Git Provider](https://git-scm.com/) profile in th
 
 ## Features
 
-- ASCII art avatar rendered from your Git Provider profile picture
-- Provider support for GitHub, GitLab, Bitbucket Cloud, Gitea, Forgejo, and Codeberg
-- Profile stats: hours since joining, public repos, followers, days since last commit
-- Top-5 language breakdown by repository bytes where the provider exposes byte data
-- Contribution heatmap (last 12 weeks, requires `--token`)
-- Config presets: `minimal`, `compact`, `full`, and `showcase`
-- Named profiles for switching between saved provider users or token sources
-- Public and authenticated viewer modes
-- Terminal themes, margins, color controls, and split or stacked layouts
-- Avatar styles: `ascii`, `halfblock`, and `braille`
-- Output formats: `ansi`, `plain`, `json`, `svg`, `card`, and `png`
-- Repository mode with provider-available repository stats, language data, contributors, and recent commits
-- Organization mode with organization stats, repositories, and public members
-- Compare mode with side-by-side profiles, rankings, language overlap, and metric summaries
-- Cache, refresh, watch, and offline modes
-- Bash, Zsh, and Fish shell completions
-- Local plugin modules loaded from Python files
+* Provider support for 6 Git Providers
+    * [GitHub](https://github.com/)
+    * [GitLab](https://gitlab.com/)
+    * [Bitbucket Cloud](https://bitbucket.org/product)
+    * [Gitea](https://about.gitea.com/)
+    * [Codeberg](https://codeberg.org/)
+    * [Forgejo](https://forgejo.org/)
+* Profile stats
+    * ASCII art avatar of Git Provider Profile
+        * `ascii`
+        * `halfblock`
+        * `braille`
+    * Hours since joining
+    * Public repos
+    * Followers
+    * Days since last commit
+    * Top-5 language breakdown by repository bytes 
+    * Contribution
+    * Repository mode with provider-available repository stats, language data, contributors, and recent commits
+    * Organization mode with organization stats, repositories, and public members heatmap (last 12 weeks, requires `--token`)
+* 4 `Gitfetch` Config presets
+    * `minimal`
+    * `compact`
+    * `full`
+    * `showcase`
+* 6 Default Output formats
+    * `ansi`
+    * `plain`
+    * `json`
+    * `svg`
+    * `card`
+    * `png`
+* Bash, Zsh, and Fish shell completions
 
 ## Usage
 
-> [!NOTE]  
-> Note that `Gitfetch` minimally requires Python3.10+ to be installed, which can be downloaded [here](https://www.python.org/downloads/).  
-> **Also** note that `Gitfetch` is optimized for terminals with font size 10.
+> [!WARNING]  
+> `Gitfetch` minimally requires Python 3.10+ to be installed, which can be downloaded [here](https://www.python.org/downloads/).  
 
 The below instructions are for locally installing and running `Gitfetch`.
 
@@ -49,13 +64,12 @@ The below instructions are for locally installing and running `Gitfetch`.
 
 ```console
 $ pip install git+https://github.com/gongahkia/gitfetch.git # use pip for a one-line install
-
 $ git clone https://github.com/gongahkia/gitfetch # alternatively use the shell installer
 $ cd gitfetch/installer
 $ ./mainInstall.sh
 ```
 
-2. Then use any of the below commands to render a profile. `--user` applies only to that run; use `gitfetch config wizard` below to save a default profile globally.
+2. Then use any of the below commands to render a profile.
 
 ```console
 $ gitfetch # uses saved username
@@ -126,13 +140,44 @@ $ gitfetch --set modules.releases.enabled=true --set modules.actions_status.enab
 $ gitfetch --set modules.contribution_breakdown.enabled=true --token ghp_xxxx
 ```
 
-Public optional modules include `social_accounts`, `organizations`, `starred`, `watched`, `gists`, `recent_activity`, `profile_readme`, `top_repos`, `releases`, `actions_status`, `repo_health`, `topics`, `dependencies`, `packages`, `commit_cadence`, and `maintainer_activity`.
+### Public optional modules
 
-Token-backed optional modules include `contributions`, `sparkline`, `streaks`, `pull_requests`, `issues`, `pinned`, `showcase`, `sponsors`, `discussions`, `security_advisories`, and `contribution_breakdown`.
+* `social_accounts`
+* `organizations`
+* `starred`
+* `watched`
+* `gists`
+* `recent_activity`
+* `profile_readme`
+* `top_repos`
+* `releases`
+* `actions_status`
+* `repo_health`
+* `topics`
+* `dependencies`
+* `packages`
+* `commit_cadence`
+* `maintainer_activity`
+
+### Token-backed optional modules
+
+* `contributions`
+* `sparkline`
+* `streaks`
+* `pull_requests`
+* `issues`
+* `pinned`
+* `showcase`
+* `sponsors`
+* `discussions`
+* `security_advisories`
+* `contribution_breakdown`
 
 ## Config
 
-`Gitfetch` reads `~/.config/gitfetch/config.toml` by default. You can use another file with `--config`.
+`Gitfetch` by default reads `~/.config/gitfetch/config.toml` at the global path. 
+
+You can optionally specify another file with `--config`.
 
 ```console
 $ gitfetch config init --preset compact
@@ -143,7 +188,7 @@ $ gitfetch --provider gitea --base-url https://git.example.com/api/v1 --user ali
 $ gitfetch --provider forgejo --base-url https://forgejo.example.com/api/v1 --user alice
 ```
 
-You can override any dotted config value for one run.
+You can also override any dotted config value for one run.
 
 ```console
 $ gitfetch --set display.avatar=false
@@ -163,7 +208,7 @@ Plugin modules are local Python files that expose `register()` or `MODULES`. Add
 $ gitfetch --set 'plugins.paths=["./my_gitfetch_plugin.py"]' --set 'plugins.modules=["my_metric"]' --set plugins.allow_unsafe=true
 ```
 
-A minimal plugin looks like this.
+### Example plugin
 
 ```python
 from gitfetch.modules.builtin import ModuleResult
@@ -195,7 +240,7 @@ $ gitfetch completions fish
 
 Encountered an issue that isn't covered here? Open an issue or shoot me a message on Telegram, and I'll get it sorted asap!
 
-### A module says it requires a token 🔐
+### Situation 1: A module says it requires a token 🔐
 
 Some Git Provider data is only available through authenticated API calls. Pass `--token`, set `GITHUB_TOKEN`, `GITLAB_TOKEN`, `BITBUCKET_TOKEN`, `GITEA_TOKEN`, `FORGEJO_TOKEN`, or `CODEBERG_TOKEN`, configure `profile.token_env`, or use `profile.token_command`.
 
@@ -210,7 +255,7 @@ $ gitfetch --token ghp_xxxx
 $ gitfetch --set profile.token_command="security find-generic-password -a work -s gitfetch -w"
 ```
 
-### I want to uninstall `Gitfetch` 😔
+### Situation 2: I want to uninstall `Gitfetch` 😔
 
 ```console
 $ pip uninstall gitfetch
@@ -218,7 +263,7 @@ $ pip uninstall gitfetch
 
 If you installed via the installer script, also remove the `export PATH` line the installer added to your shell rc file (`~/.bashrc`, `~/.zshrc`, or `~/.config/fish/config.fish`).
 
-### `ls`, `sudo` and other terminal commands suddenly don't work 😭
+### Situation 3: `ls`, `sudo` and other terminal commands suddenly don't work 😭
 
 > *This might seem daunting, but I believe in you. You got this.*
 
@@ -242,7 +287,7 @@ $ cat .bashrc
 **Step 5:**
 Check to ensure that the line has been added. End your terminal session and start a new one to reload `.bashrc` file.
 
-### I typed the wrong username and want to change it 🤡
+### Situation 4: I typed the wrong username and want to change it 🤡
 
 **Step 1:**  
 ```console
