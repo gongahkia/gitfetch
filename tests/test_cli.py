@@ -130,7 +130,7 @@ class CLITests(unittest.TestCase):
             )
             mock_client_factory.return_value = client
             stdout = io.StringIO()
-            with contextlib.redirect_stdout(stdout):
+            with mock.patch("gitfetch.config._github_cli_token", return_value=""), contextlib.redirect_stdout(stdout):
                 self.assertEqual(main(["--config", str(path), "--no-avatar", "--no-color", "--format", "plain"]), 0)
             self.assertIn("requires --token", stdout.getvalue())
 
