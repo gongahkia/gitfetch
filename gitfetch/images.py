@@ -7,7 +7,6 @@ from urllib.request import Request, urlopen
 
 from PIL import Image
 
-
 AVATAR_TIMEOUT_SECONDS: Final = 10
 MAX_AVATAR_BYTES: Final = 5 * 1024 * 1024
 

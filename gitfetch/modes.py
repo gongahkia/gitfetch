@@ -8,15 +8,15 @@ from typing import Any
 
 from gitfetch.cache import CacheStore
 from gitfetch.config import (
+    PROVIDER_TOKEN_ENVS,
+    ConfigError,
     apply_named_profile,
     cache_dir,
     config_path,
     get_token,
     load_config,
     normalize_config,
-    PROVIDER_TOKEN_ENVS,
     set_override,
-    ConfigError,
 )
 from gitfetch.github_api import GitHubAPIError, GitHubClient
 from gitfetch.modules import MODULE_HANDLERS, available_module_metadata, build_module_list, load_plugin_modules

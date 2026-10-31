@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import time
 from collections import Counter
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Callable
+from typing import Any
 
 from gitfetch.github_api import GitHubClient, GitHubContext, format_relative_days
-
 
 HEATMAP_BLOCKS = [" ", "░", "▒", "▓", "█"]
 SPARKLINE_BLOCKS = [" ", "▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"]
@@ -593,8 +593,7 @@ def _flatten_contribution_days(graphql: dict[str, Any]) -> list[dict[str, Any]]:
     weeks = graphql.get("contributionsCollection", {}).get("contributionCalendar", {}).get("weeks", [])
     days: list[dict[str, Any]] = []
     for week in weeks:
-        for day in week.get("contributionDays", []):
-            days.append(day)
+        days.extend(week.get("contributionDays", []))
     return days
 
 

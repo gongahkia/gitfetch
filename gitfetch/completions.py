@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from gitfetch.config import SUPPORTED_PROVIDERS
 
-
 COMMANDS = ["config", "modules", "repo", "org", "compare", "completions", "token"]
 TOP_FLAGS = [
     "--user", "--provider", "--base-url", "--profile", "--token", "--mode", "--config", "--set", "--format",

@@ -4,23 +4,30 @@ import base64
 import hashlib
 from collections import Counter
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, ClassVar
 from urllib.parse import quote
 
 import requests
 
 from gitfetch.cache import CacheStore
-from gitfetch.config import ConfigError, MODULE_METADATA, SUPPORTED_PROVIDERS
-from gitfetch.github_api import GitHubAPIError, GitHubClient, GitHubContext, ProviderSession, configure_http_retries, filter_repos
+from gitfetch.config import MODULE_METADATA, SUPPORTED_PROVIDERS, ConfigError
+from gitfetch.github_api import (
+    GitHubAPIError,
+    GitHubClient,
+    GitHubContext,
+    ProviderSession,
+    configure_http_retries,
+    filter_repos,
+)
 
 
 class BaseProviderClient:
     provider_name = "provider"
     provider_title = "Provider"
-    supported_modules: set[str] = {"identity", "stats"}
-    token_required_modules: set[str] = set()
+    supported_modules: ClassVar[set[str]] = {"identity", "stats"}
+    token_required_modules: ClassVar[set[str]] = set()
     language_breakdown_unit = "bytes"
-    unsupported_reasons: dict[str, str] = {}
+    unsupported_reasons: ClassVar[dict[str, str]] = {}
 
     def __init__(self, token: str, cache: CacheStore, offline: bool, base_url: str) -> None:
         self.token = token
@@ -48,7 +55,7 @@ class BaseProviderClient:
         return f"{self.provider_name}|{self.base_url}|{prefix}|{auth_scope}|{suffix}"
 
     def _url(self, path: str) -> str:
-        if path.startswith("http://") or path.startswith("https://"):
+        if path.startswith(("http://", "https://")):
             return path
         return f"{self.base_url}{path}"
 
@@ -129,7 +136,7 @@ class BaseProviderClient:
 class GitLabClient(BaseProviderClient):
     provider_name = "gitlab"
     provider_title = "GitLab"
-    supported_modules = {
+    supported_modules: ClassVar[set[str]] = {
         "identity",
         "stats",
         "languages",
@@ -149,8 +156,8 @@ class GitLabClient(BaseProviderClient):
         "packages",
         "maintainer_activity",
     }
-    token_required_modules = {"dependencies", "security_advisories"}
-    unsupported_reasons = {
+    token_required_modules: ClassVar[set[str]] = {"dependencies", "security_advisories"}
+    unsupported_reasons: ClassVar[dict[str, str]] = {
         "contributions": "GitLab does not expose a stable public user contribution-calendar API",
         "sparkline": "GitLab does not expose a stable public user contribution-calendar API",
         "streaks": "GitLab does not expose a stable public user contribution-calendar API",
@@ -643,7 +650,7 @@ class GitLabClient(BaseProviderClient):
 class GiteaClient(BaseProviderClient):
     provider_name = "gitea"
     provider_title = "Gitea"
-    supported_modules = {
+    supported_modules: ClassVar[set[str]] = {
         "identity",
         "stats",
         "languages",
@@ -665,8 +672,8 @@ class GiteaClient(BaseProviderClient):
         "commit_cadence",
         "maintainer_activity",
     }
-    token_required_modules = {"organizations", "starred", "watched"}
-    unsupported_reasons = {
+    token_required_modules: ClassVar[set[str]] = {"organizations", "starred", "watched"}
+    unsupported_reasons: ClassVar[dict[str, str]] = {
         "gists": "Gitea-compatible APIs have no gist/snippet equivalent in this provider layer",
         "rate_limit": "Gitea-compatible APIs do not expose a portable public rate-limit endpoint here",
         "pinned": "Gitea-compatible APIs have no GitHub-style pinned profile items",
@@ -1108,7 +1115,7 @@ class BitbucketClient(BaseProviderClient):
     # Bitbucket Cloud exposes a repository's primary language but not a
     # language-by-byte endpoint, so never present repository counts as bytes.
     language_breakdown_unit = "repositories"
-    supported_modules = {
+    supported_modules: ClassVar[set[str]] = {
         "identity",
         "stats",
         "languages",
@@ -1120,7 +1127,7 @@ class BitbucketClient(BaseProviderClient):
         "actions_status",
         "commit_cadence",
     }
-    unsupported_reasons = {
+    unsupported_reasons: ClassVar[dict[str, str]] = {
         "contributions": "Bitbucket Cloud has no public profile contribution calendar API",
         "sparkline": "Bitbucket Cloud has no public profile contribution calendar API",
         "streaks": "Bitbucket Cloud has no public profile contribution calendar API",
@@ -1157,7 +1164,7 @@ class BitbucketClient(BaseProviderClient):
         self.session.headers.update({"Accept": "application/json"})
         if token:
             if auth_mode == "basic":
-                encoded = base64.b64encode(f"{auth_username}:{token}".encode("utf-8")).decode("ascii")
+                encoded = base64.b64encode(f"{auth_username}:{token}".encode()).decode("ascii")
                 self.session.headers["Authorization"] = f"Basic {encoded}"
             else:
                 self.session.headers["Authorization"] = f"Bearer {token}"

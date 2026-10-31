@@ -9,18 +9,18 @@ import requests
 from gitfetch import __version__
 from gitfetch.cache import CacheStore
 from gitfetch.config import (
+    PROVIDER_TOKEN_ENVS,
+    SUPPORTED_PROVIDERS,
+    ConfigError,
     apply_named_profile,
-    config_path,
     cache_dir,
+    config_path,
     get_token,
     load_config,
     normalize_config,
     preset_config,
     set_override,
     write_config,
-    ConfigError,
-    PROVIDER_TOKEN_ENVS,
-    SUPPORTED_PROVIDERS,
 )
 from gitfetch.github_api import GitHubAPIError
 from gitfetch.modules import MODULE_HANDLERS, available_module_metadata, build_module_list, load_plugin_modules

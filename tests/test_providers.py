@@ -1,15 +1,22 @@
 import tempfile
 import unittest
-
-import requests
 from datetime import datetime, timezone
 from pathlib import Path
 from unittest import mock
 
+import requests
+
 from gitfetch.cache import CacheStore
 from gitfetch.config import ConfigError, get_token, preset_config
 from gitfetch.github_api import GitHubAPIError, GitHubClient, format_relative_days
-from gitfetch.providers import BitbucketClient, CodebergClient, ForgejoClient, GiteaClient, GitLabClient, create_provider_client
+from gitfetch.providers import (
+    BitbucketClient,
+    CodebergClient,
+    ForgejoClient,
+    GiteaClient,
+    GitLabClient,
+    create_provider_client,
+)
 
 
 def _cache() -> CacheStore:
@@ -23,9 +30,11 @@ class ProviderTests(unittest.TestCase):
 
     def test_provider_session_normalizes_transport_errors_for_library_callers(self) -> None:
         client = GitHubClient("", _cache(), False)
-        with mock.patch("requests.Session.request", side_effect=requests.ConnectionError("offline")):
-            with self.assertRaisesRegex(GitHubAPIError, "network request failed: offline"):
-                client.get_user("alice")
+        with (
+            mock.patch("requests.Session.request", side_effect=requests.ConnectionError("offline")),
+            self.assertRaisesRegex(GitHubAPIError, "network request failed: offline"),
+        ):
+            client.get_user("alice")
 
     def test_github_rate_limit_uses_stale_cached_response(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

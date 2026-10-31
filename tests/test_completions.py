@@ -40,6 +40,6 @@ class CompletionsTests(unittest.TestCase):
         if not bash:
             self.skipTest("bash not available")
         result = subprocess.run(
-            [bash, "-n"], input=script_for("bash"), text=True, capture_output=True
+            [bash, "-n"], input=script_for("bash"), text=True, capture_output=True, check=False
         )
         self.assertEqual(result.returncode, 0, msg=result.stderr)

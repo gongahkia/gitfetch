@@ -1,5 +1,5 @@
-from io import BytesIO
 import unittest
+from io import BytesIO
 from unittest import mock
 
 from PIL import Image

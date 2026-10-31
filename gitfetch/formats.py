@@ -2,15 +2,15 @@ from __future__ import annotations
 
 import base64
 import re
+from collections.abc import Iterator
 from io import BytesIO
-from typing import Any, Iterator
+from typing import Any
 
 from PIL import Image, ImageDraw, ImageFont
 
 from gitfetch.images import fetch_avatar_image
 from gitfetch.language_icons import language_icon_data_uri, language_icon_image
 from gitfetch.modules.builtin import ModuleResult
-
 
 ANSI_TOKEN_RE = re.compile(r"\x1b\[([0-9;]*)m")
 

@@ -12,7 +12,6 @@ from PIL import Image
 from gitfetch.images import fetch_avatar_image
 from gitfetch.modules.builtin import ModuleResult
 
-
 COLOR_CODES = {
     "red": 91,
     "green": 92,
@@ -69,9 +68,7 @@ def color_enabled(config: dict[str, Any], output_format: str) -> bool:
     if os.environ.get("NO_COLOR"):
         return False
     stream = getattr(sys.stdout, "isatty", None)
-    if callable(stream) and not stream():
-        return False
-    return True
+    return not (callable(stream) and not stream())
 
 
 def palette_for(config: dict[str, Any]) -> dict[str, ThemeValue]:

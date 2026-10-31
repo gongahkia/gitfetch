@@ -1,9 +1,9 @@
-import unittest
 import tempfile
+import unittest
 from pathlib import Path
 
-from gitfetch.modules.builtin import ModuleResult
 from gitfetch.formats import render_card_png
+from gitfetch.modules.builtin import ModuleResult
 from gitfetch.render import render_output
 
 

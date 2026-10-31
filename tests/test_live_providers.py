@@ -11,6 +11,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from typing import ClassVar
 
 from gitfetch.cache import CacheStore
 from gitfetch.config import preset_config
@@ -22,7 +23,7 @@ from gitfetch.providers import create_provider_client
     "set GITFETCH_LIVE_PROVIDERS=1 to run live provider smoke tests",
 )
 class LiveProviderSmokeTests(unittest.TestCase):
-    PROVIDERS = {
+    PROVIDERS: ClassVar[dict[str, tuple[str, str]]] = {
         "github": ("GITFETCH_LIVE_GITHUB_USER", "octocat"),
         "gitlab": ("GITFETCH_LIVE_GITLAB_USER", "gitlab-org"),
         "bitbucket": ("GITFETCH_LIVE_BITBUCKET_USER", "atlassian"),

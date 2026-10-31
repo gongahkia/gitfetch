@@ -6,7 +6,6 @@ from pathlib import Path
 
 from PIL import Image
 
-
 _ICON_NAMES = {
     "c": "c",
     "c++": "cpp",

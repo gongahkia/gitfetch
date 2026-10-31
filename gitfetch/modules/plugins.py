@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 import importlib.util
+from collections.abc import Callable
 from pathlib import Path
 from types import ModuleType
-from typing import Any, Callable
+from typing import Any
 
 from gitfetch.config import ConfigError
 from gitfetch.github_api import GitHubClient, GitHubContext
 from gitfetch.modules.builtin import MODULE_HANDLERS, ModuleResult
-
 
 PLUGIN_METADATA: dict[str, dict[str, Any]] = {}
 _PLUGIN_NAMES: set[str] = set()
@@ -102,7 +102,7 @@ def _wrap_handler(name: str, title: str, handler: PluginHandler):
     def wrapped(config: dict[str, Any], context: GitHubContext, client: GitHubClient) -> ModuleResult:
         try:
             result = handler(config, context, client)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - isolate failures from user-supplied plugin handlers
             return ModuleResult(name, title, [f"plugin failed: {exc}"], {"error": str(exc)})
         if isinstance(result, ModuleResult):
             return result

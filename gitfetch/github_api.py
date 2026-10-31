@@ -11,7 +11,6 @@ from urllib3.util.retry import Retry
 
 from gitfetch.cache import CacheStore
 
-
 USER_AGENT = "gitfetch/2.0.0"
 
 
