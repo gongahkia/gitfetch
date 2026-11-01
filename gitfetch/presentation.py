@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from gitfetch.github_api import GitHubContext
     from gitfetch.modules.builtin import ModuleResult
 
+NoticeKind = Literal["availability", "coverage", "scope"]
 
 @dataclass(frozen=True)
 class ProfileIdentity:
@@ -103,7 +104,7 @@ class RecentActivity:
 
 @dataclass(frozen=True)
 class PresentationNotice:
-    kind: Literal["availability", "coverage", "scope", "data"]
+    kind: NoticeKind
     subjects: tuple[tuple[str, str], ...]  # (module, measurement identifier)
     measurement: Measurement
 
@@ -338,14 +339,15 @@ def _notices(sections: Sequence[PresentationSection]) -> tuple[PresentationNotic
     notices: dict[tuple, PresentationNotice] = {}
     for section in sections:
         for key, measurement in section.measurements.items():
-            kinds = []
+            kinds: list[NoticeKind] = []
             if measurement.availability != "available":
                 kinds.append("availability")
             elif (measurement.coverage != "complete"
                   and not (section.name == "streaks" and key in {"current", "longest"} and "contributions" in section.measurements)):
                 # Current/longest streaks refer to the same underlying window.
                 kinds.append("coverage")
-            if section.name == "languages" and key == "languages" and not measurement.complete_profile:
+            if (measurement.availability == "available" and key == section.name
+                    and ((section.name == "languages" and not measurement.complete_profile) or section.name == "top_repos")):
                 kinds.append("scope")
             for kind in kinds:
                 identity = (kind, measurement.availability, measurement.coverage, measurement.provider,
@@ -375,6 +377,10 @@ def build_profile_document(user: Mapping[str, Any], modules: Sequence[ModuleResu
         name = _text(module.name) or f"module-{index}"
         metadata = {key: value for key, value in _mapping(module.measurements).items()
                     if isinstance(key, str) and isinstance(value, Measurement)}
+        if name == "stats" and context is not None:
+            for key, value in _mapping(getattr(context, "measurements", None)).items():
+                if key in {"public_repos", "followers", "following", "public_gists"} and isinstance(value, Measurement):
+                    metadata.setdefault(key, value)
         payload = _mapping(module.data)
         if name not in metadata:
             if payload.get("requires_token") is True and len(payload) == 1:
@@ -389,7 +395,7 @@ def build_profile_document(user: Mapping[str, Any], modules: Sequence[ModuleResu
             for metric in content.metrics:
                 metadata.setdefault(metric.identifier, metric.measurement)
         elif isinstance(content, (LanguageDistribution, ContributionActivity, RepositoryList, RecentActivity)):
-            metadata.setdefault(name, content.measurement)
+            metadata[name] = content.measurement
         lines = (module.lines,) if isinstance(module.lines, str) else _sequence(module.lines)
         sections.append(PresentationSection(name, _display_text(module.title), tuple(_display_text(line) for line in lines),
                                              content, MappingProxyType(metadata), _snapshot(module.data)))
