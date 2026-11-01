@@ -422,7 +422,7 @@ class SemanticTests(unittest.TestCase):
         ctx.events = [event]
         result = module_commit_cadence(self.config, ctx, client)
         self.assertIsNone(result.data["commits"])
-        self.assertIn("commits in public events: unavailable", result.lines)
+        self.assertIn("commits in visible events: unavailable", result.lines)
 
     def test_comparison_excludes_unavailable_but_preserves_real_zero(self):
         metrics = [_compare_metrics(context(user={"login": login, "followers": value}))

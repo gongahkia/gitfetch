@@ -459,7 +459,7 @@ def handle_org_command(args: argparse.Namespace) -> int:
 
     measured_repos = [repo for repo in repos if number(repo.get("stargazers_count")) is not None]
     sorted_repos = sorted(measured_repos, key=lambda r: (-r["stargazers_count"], str(r.get("name") or "")))[:args.repos_limit]
-    repo_title = "Top Repos"
+    repo_title = "Top Repos (Known Stars)" if len(measured_repos) != len(repos) else "Top Repos"
     if not measured_repos:
         sorted_repos = sorted(repos, key=lambda r: str(r.get("name") or ""))[:args.repos_limit]
         repo_title = "Repositories (Stars Unavailable)"

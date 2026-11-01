@@ -114,7 +114,13 @@ Confirmed profile/repository normalization bugs corrected:
   unavailable rather than zero; explicitly returned zero remains valid.
 - Gitea push activity no longer invents one commit per event; GitLab missing
   push commit counts also remain unknown. Sample-based Gitea/Bitbucket repository
-  contributors are explicitly labeled as a retrieved commit sample.
+  contributors are explicitly labeled as a retrieved commit sample. Non-GitHub
+  activity is labeled visible, since token permissions can expose more than
+  public activity without supplying an event-level visibility flag.
+- Incomplete star rankings identify their known-star scope; organizations with
+  no star measurements retain an alphabetical, explicitly unranked repository
+  listing rather than inventing a numerical order. Missing comparison language
+  metadata is labeled incomplete rather than proving no language overlap.
 
 ## Contribution calendars and streaks
 
@@ -123,6 +129,9 @@ returns timestamped contribution records, not commit totals or coverage bounds.
 The inspected [Gitea implementation](https://github.com/go-gitea/gitea/blob/v1.24.0/models/activities/user_heatmap.go)
 counts activity actions, applies viewer permissions, uses a bounded lookback,
 and can successfully return an empty array when activity is not readable.
+The [Forgejo heatmap implementation](https://codeberg.org/forgejo/forgejo/src/branch/forgejo/models/activities/user_heatmap.go)
+also counts activity actions and applies visibility and lookback conditions;
+its timestamps do not certify continuous coverage.
 Consequently, a successful empty response means **zero returned records with
 unknown visibility/window coverage**, not a proven zero-activity year.
 
@@ -227,3 +236,65 @@ samples, not lifetime counts. Existing caching of stale successful responses
 retains its original behavior; no freshness guarantee is added. Unknown profile
 metrics and selected-collection totals should be carried into Tranche 03 without
 inventing measurements or exposing internal provenance by accident.
+
+## Final verification and changed files
+
+Verdict: **PASS**, with the explicit JSON leaf-type corrections above and the
+preexisting packaging warnings below. Final suite: **204 discovered, 198 passed,
+6 skipped**; 67 new semantic tests. No existing tests were removed. Tranche 01's
+contract and terminal-text test files, terminal-text utilities, renderer,
+dependencies, formula and original foundation report remain byte-for-byte
+unchanged. Changes to its CLI/formats/modes files are layered metric fixes.
+No commits, tags or releases were created; HEAD and branch remain unchanged.
+
+Added: `gitfetch/semantics.py`, `tests/test_semantics.py`, this report.
+Modified for this tranche: `gitfetch/cli.py`, `gitfetch/formats.py`,
+`gitfetch/github_api.py`, `gitfetch/modes.py`, `gitfetch/modules/builtin.py`,
+`gitfetch/providers.py`, `tests/test_modes.py`, `tests/test_modules.py`,
+`tests/test_providers.py`.
+
+Commands executed from the checkout unless otherwise specified:
+
+| Check | Exact command | Result |
+| --- | --- | --- |
+| Incoming baseline | `.venv/bin/python -m unittest discover -s tests -v` | 137 tests, 131 passed, 6 skipped |
+| Final Python 3.12.14 | `.venv/bin/python -m unittest discover -s tests` | 204 tests, 198 passed, 6 skipped |
+| Final Python 3.10.21 | `/tmp/gitfetch-foundation-310/bin/python -m unittest discover -s tests` | Same 204/198/6 |
+| Ruff | `/tmp/gitfetch-foundation-312/bin/ruff check gitfetch tests installer` | PASS |
+| mypy, Python 3.10 target | `/tmp/gitfetch-foundation-312/bin/mypy gitfetch` | PASS, 18 source files |
+| Compile, Python 3.10 | `/tmp/gitfetch-foundation-310/bin/python -m compileall -q gitfetch` | PASS |
+| Patch whitespace | `git diff --check` | PASS |
+| Dependencies | `uv pip check --python /tmp/gitfetch-foundation-312/bin/python` | PASS |
+| Dependencies, Python 3.10 | `uv pip check --python /tmp/gitfetch-foundation-310/bin/python` | PASS |
+| Checkout dependencies | `uv pip check --python .venv/bin/python` | PASS |
+
+The environments do not include the `pip` module; attempted `python -m pip
+check` could not run. The equivalent dependency checks above used installed
+`uv` successfully.
+
+Packaging used a copy of the source, excluding `.git`, virtual environments,
+caches and build artifacts, so existing editable-install metadata was not
+modified. The final build directory was
+`/tmp/gitfetch-tranche02-final-l55in3i1` (`PACKAGE_ROOT` below):
+
+```sh
+/tmp/gitfetch-foundation-312/bin/python -m build --no-isolation --sdist --wheel "$PACKAGE_ROOT/source" --outdir "$PACKAGE_ROOT/dist"
+uv pip install --python /tmp/gitfetch-foundation-312/bin/python --no-deps --link-mode copy --target "$PACKAGE_ROOT/installed" "$PACKAGE_ROOT/dist/gitfetch-2.0.0-py3-none-any.whl"
+# Run from /tmp, outside the checkout:
+PYTHONPATH="$PACKAGE_ROOT/installed" /tmp/gitfetch-foundation-312/bin/python -m unittest discover -s /home/gongahkia/coding/projects/gitfetch/tests
+```
+
+All passed; the installed wheel also ran 204 tests (198 passed, 6 skipped).
+A Python 3.10 installed-wheel smoke script asserted its import path came from
+`$PACKAGE_ROOT/installed`, exercised the CLI version exit, and checked legacy
+`ModuleResult`/`GitHubContext` constructors and zero/missing measurements: PASS.
+
+The build retains two existing warnings: deprecated `project.license` table
+metadata and the repository's missing root `LICENSE` file. No license or release
+metadata was changed. **NOT VERIFIED:** live provider APIs, actual personal
+credentials, deployment-specific coverage and a Homebrew installation. The six
+opt-in integration tests remained skipped throughout.
+
+The corrected values and explicit internal provenance are ready for Tranche 03's
+shared presentation document. That document and the responsive redesign have
+not been started.

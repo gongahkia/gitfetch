@@ -77,7 +77,7 @@ def module_stats(config: dict[str, Any], context: GitHubContext, client: GitHubC
     age_hours = int((datetime.now(created_at.tzinfo) - created_at).total_seconds() / 3600) if created_at else None
     latest_repo_activity = None
     for repo in context.repos:
-        pushed_at = repo.get("pushed_at")
+        pushed_at = repo.get("pushed_at") or repo.get("updated_at")
         if pushed_at and (latest_repo_activity is None or pushed_at > latest_repo_activity):
             latest_repo_activity = pushed_at
     latest_public_event = context.events[0]["created_at"] if context.events else None
@@ -102,7 +102,8 @@ def module_stats(config: dict[str, Any], context: GitHubContext, client: GitHubC
     if latest_public_event:
         relative = format_relative_days(latest_public_event)
         if relative:
-            lines.append(f"last public activity: {relative}")
+            scope_label = "public" if provider == "github" else "visible"
+            lines.append(f"last {scope_label} activity: {relative}")
     elif latest_repo_activity:
         relative = format_relative_days(latest_repo_activity)
         if relative:
@@ -443,7 +444,9 @@ def module_top_repos(config: dict[str, Any], context: GitHubContext, client: Git
         key=lambda repo: (-repo["stargazers_count"], str(repo.get("full_name") or repo.get("name") or "").casefold()),
     )[:limit]
     lines, data = _repo_lines(repos, limit)
-    return ModuleResult("top_repos", "Top Repos", lines, data, hidden=not bool(lines))
+    partial = any(number(repo.get("stargazers_count")) is None for repo in context.repos)
+    return ModuleResult("top_repos", "Top Repos (Known Stars)" if partial else "Top Repos", lines, data,
+                        hidden=not bool(lines))
 
 
 def _split_full_name(repo: dict[str, Any]) -> tuple[str, str] | None:
@@ -701,7 +704,7 @@ def module_commit_cadence(config: dict[str, Any], context: GitHubContext, client
                     if all(isinstance((event.get("payload") or {}).get("commits"), list) for event in push_events) else None)
     lines = [
         f"push events shown: {len(push_events)}",
-        f"commits in public events: {metric_text(commit_count)}",
+        f"commits in {'public' if getattr(client, 'provider_name', 'github') == 'github' else 'visible'} events: {metric_text(commit_count)}",
     ]
     data = {"push_events": len(push_events), "commits": commit_count}
     return ModuleResult("commit_cadence", "Commit Cadence", lines, data, hidden=not bool(push_events))
