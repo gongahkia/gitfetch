@@ -1,19 +1,19 @@
 #####################   Alex Rivera
-&&###SSSSSSSSSSS###&&   @alex-dev · GitHub
+&&###SS##SSS##SS###&&   @alex-dev · GitHub
 &&SSSSSSS#&#SSSSSSS&&   Building thoughtful developer tools and small, useful
 &&SSSS#@@*!!$@#SSSS&&   things for the open web.
-&&SSSS#*:!!!:*#SSSS&&   Singapore   Open Source Collective   alex.example
-@&SSSSS#$***$#SSSSS&@
-@&SSSS&@$$$$$@&SSSS&@   42 public repos   1,280 followers
-@&SS#$*********$#SS&@   87 following   0 gists   7 years on platform
-$@#S#***********#S#@$
+&&SSSS#!:!!!:!#SSSS&&   Singapore   Open Source Collective   alex.example
+@&SSS#S#$***$#S#SSS&@
+@&SSSS&@@$$$@@&SSSS&@   42 public repos   1,280 followers
+@&SSS$*!!***!!*$SSS&@   87 following   0 gists   7 years on platform
+$@SS#!*********!#SS@$
 $$@&#@*********@#&@$$   Languages · bytes
 $$$$$@$%%%%%%%$@$$$$$   20/42 repos scanned · selected repos · partial
                         Python      ━━━━━━━━━━· ·   73.0%
                         TypeScript  ━━· · · · · ·   16.0%
                         Go          ━· · · · · · ·   6.0%
-                        Rust        · · · · · · ·    3.0%
-                        Shell       · · · · · · ·    1.0%
+                        Rust        ╸· · · · · · ·   3.0%
+                        Shell       ╸· · · · · · ·   1.0%
 
                         Activity · contributions · complete coverage
                         Shown: 2025-11-06 – 2026-01-28

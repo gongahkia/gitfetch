@@ -23,6 +23,7 @@ from gitfetch.config import (
     write_config,
 )
 from gitfetch.github_api import GitHubAPIError
+from gitfetch.images import AvatarLoader, AvatarPolicy
 from gitfetch.modules import MODULE_HANDLERS, available_module_metadata, build_module_list, load_plugin_modules
 from gitfetch.modules.builtin import GRAPHQL_MODULES, ModuleResult
 from gitfetch.presentation import build_profile_document
@@ -59,7 +60,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--watch", type=int, metavar="SECS", help="Re-render every N seconds until interrupted")
     cache_group = parser.add_mutually_exclusive_group()
     cache_group.add_argument("--refresh", action="store_true", help="Bypass cache reads for this run")
-    cache_group.add_argument("--offline", action="store_true", help="Read from cache only; fail if anything is missing")
+    cache_group.add_argument("--offline", action="store_true", help="Use cached provider data and avatars only; missing avatars are optional")
 
     subparsers = parser.add_subparsers(dest="command")
     config_parser = subparsers.add_parser("config", help="Manage gitfetch configuration")
@@ -435,6 +436,10 @@ def handle_render_command(args: argparse.Namespace) -> int:
         bypass_read=bool(args.refresh),
     )
     client = create_provider_client(config, token=token, cache=cache, offline=bool(args.offline))
+    avatar_policy = AvatarPolicy.from_cache(
+        cache, provider=client.provider_name, instance=provider_base_url(config, client.provider_name),
+        token=token, mode=config["profile"]["mode"], offline=bool(args.offline),
+    )
 
     selected_modules = build_module_list(config)
 
@@ -465,13 +470,16 @@ def handle_render_command(args: argparse.Namespace) -> int:
             instance=provider_base_url(config, client.provider_name), context=context,
         )
         output_format = args.format or config["display"].get("format", "ansi")
+        # A fresh frame memo lets watch respect TTL/refresh without retaining
+        # decoded images indefinitely. Acquisition remains lazy in renderers.
+        render_config = {**config, "_avatar_loader": AvatarLoader(avatar_policy)}
         if output_format == "png":
             from gitfetch.formats import render_card_png
 
-            render_card_png(config, context.user, [m for m in module_results if not m.hidden], _png_output_path(args))
+            render_card_png(render_config, context.user, [m for m in module_results if not m.hidden], _png_output_path(args))
             print(f"wrote {args.save}")
             return
-        _write_or_print(render_output(config, context.user, module_results, output_format, document=document), args)
+        _write_or_print(render_output(render_config, context.user, module_results, output_format, document=document), args)
 
     if args.watch:
         if args.watch < 1:

@@ -7,8 +7,8 @@ Singapore   Open Source Collective   alex.example
 
 Languages · bytes
 20/42 repos scanned · selected repos · partial
-Python      ━━━━━━━━━━━━· ·   73.0%
-TypeScript  ━━━· · · · · · ·  16.0%
+Python      ━━━━━━━━━━━╸· ·   73.0%
+TypeScript  ━━╸· · · · · · ·  16.0%
 Go          ━· · · · · · · ·   6.0%
 
 Activity · contributions · complete coverage

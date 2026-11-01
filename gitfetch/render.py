@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import shutil
@@ -12,7 +13,7 @@ from typing import Any
 from PIL import Image
 from wcwidth import iter_graphemes
 
-from gitfetch.images import fetch_avatar_image
+from gitfetch.images import avatar_render, fetch_avatar_image
 from gitfetch.modules.builtin import ModuleResult
 from gitfetch.presentation import PresentationSection, ProfileDocument, build_profile_document
 from gitfetch.terminal_text import cell_width, sanitize_text
@@ -54,6 +55,7 @@ THEME_NAMES = tuple(THEMES.keys())
 ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 SPLIT_GAP = 3
 MIN_AVATAR_WIDTH = 20
+MAX_TEXT_AVATAR_DIMENSION = 256
 
 
 def visible_len(text: str) -> int:
@@ -105,6 +107,7 @@ def colorize(text: str, code: ThemeValue, enabled: bool) -> str:
     return f"{seq}{text}\033[00m"
 
 
+@avatar_render
 def render_output(
     config: dict[str, Any],
     user: dict[str, Any],
@@ -295,7 +298,7 @@ def _load_avatar(url: str) -> Image.Image | None:
 
 
 def render_avatar(avatar_url: str | None, width: int, style: str, color_mode: str, ramp: str) -> list[str]:
-    if not avatar_url:
+    if not avatar_url or width < 1:
         return []
     img = _load_avatar(avatar_url)
     if img is None:
@@ -305,7 +308,16 @@ def render_avatar(avatar_url: str | None, width: int, style: str, color_mode: st
 
 def _render_avatar_image(img: Image.Image, width: int, style: str, color_mode: str, ramp: str) -> list[str]:
     source_width, source_height = img.size
+    if source_width < 1 or source_height < 1 or width < 1:
+        return []
     aspect = source_height / source_width
+    # Even a tiny compressed image can have an extreme aspect ratio. Bound
+    # legacy/export upscaling as well as decoding, preserving proportions or
+    # falling back to text when one column would already exceed the row limit.
+    factor = 0.55 if style not in {"halfblock", "braille"} else 0.5
+    width = min(width, MAX_TEXT_AVATAR_DIMENSION, math.floor(MAX_TEXT_AVATAR_DIMENSION / (aspect * factor)))
+    if width < 1:
+        return []
     if style == "halfblock":
         return _render_halfblock(img, width, aspect, color_mode)
     if style == "braille":
@@ -317,25 +329,40 @@ def avatar_to_ascii(avatar_url: str | None, width: int, chars: str) -> list[str]
     return render_avatar(avatar_url, width, "ascii", "none", chars)
 
 
+# Ordered alpha coverage approximates transparency without inventing a terminal
+# background. Opaque colors (including black) are never keyed out.
+_ALPHA_MATRIX = ((0, 8, 2, 10), (12, 4, 14, 6), (3, 11, 1, 9), (15, 7, 13, 5))
+
+
+def _alpha_visible(alpha: int, x: int, y: int) -> bool:
+    return alpha > _ALPHA_MATRIX[y % 4][x % 4] * 16 + 8
+
+
+def _avatar_samples(img: Image.Image, size: tuple[int, int]) -> Image.Image:
+    # Pillow's RGBA resampling uses premultiplied alpha, avoiding dark fringes.
+    rgba = img if img.mode == "RGBA" else img.convert("RGBA")
+    return rgba.resize(size, Image.Resampling.LANCZOS)
+
+
 def _render_ascii(img: Image.Image, width: int, aspect: float, color_mode: str, ramp: str) -> list[str]:
     chars = [char for char in iter_graphemes(sanitize_text(ramp)) if cell_width(char) == 1]
     chars = chars or list("BS#&@$%*!:.")
     target_h = max(1, int(aspect * width * 0.55))
-    gray = img.resize((width, target_h)).convert("L")
-    gray_pixels = list(gray.getdata())
-    if color_mode == "none":
-        glyphs = [chars[min(len(chars) - 1, pixel * len(chars) // 256)] for pixel in gray_pixels]
-        return ["".join(glyphs[i:i + width]) for i in range(0, len(glyphs), width)]
-    rgb = img.resize((width, target_h)).convert("RGB")
-    rgb_pixels = list(rgb.getdata())
+    sampled = _avatar_samples(img, (width, target_h))
+    pixels = list(sampled.getdata())
+    gray = list(sampled.convert("L").getdata())
     lines = []
     for row in range(target_h):
-        parts: list[str] = []
+        parts = []
         for col in range(width):
             idx = row * width + col
-            r, g, b = rgb_pixels[idx]
-            ch = chars[min(len(chars) - 1, gray_pixels[idx] * len(chars) // 256)]
-            parts.append(f"{_fg(r, g, b, color_mode)}{ch}")
+            r, g, b, alpha = pixels[idx]
+            if not _alpha_visible(alpha, col, row):
+                parts.append(" ")
+                continue
+            # Preserve the historic luminance direction and every custom ramp.
+            ch = chars[min(len(chars) - 1, gray[idx] * len(chars) // 256)]
+            parts.append(ch if color_mode == "none" else f"{_fg(r, g, b, color_mode)}{ch}")
         if color_mode != "none":
             parts.append("\x1b[0m")
         lines.append("".join(parts))
@@ -344,28 +371,27 @@ def _render_ascii(img: Image.Image, width: int, aspect: float, color_mode: str, 
 
 def _render_halfblock(img: Image.Image, width: int, aspect: float, color_mode: str) -> list[str]:
     target_h = max(1, int(aspect * width * 0.5))
-    pixel_h = target_h * 2
-    rgb = img.resize((width, pixel_h)).convert("RGB")
-    rgb_pixels = list(rgb.getdata())
-    lines: list[str] = []
+    pixels = list(_avatar_samples(img, (width, target_h * 2)).getdata())
+    lines = []
     for row in range(target_h):
-        parts: list[str] = []
+        parts = []
         for col in range(width):
-            top = rgb_pixels[(row * 2) * width + col]
-            bot = rgb_pixels[(row * 2 + 1) * width + col]
+            top = pixels[row * 2 * width + col]
+            bot = pixels[(row * 2 + 1) * width + col]
+            t = _alpha_visible(top[3], col, row * 2)
+            b = _alpha_visible(bot[3], col, row * 2 + 1)
             if color_mode == "none":
-                t_lum = sum(top) // 3
-                b_lum = sum(bot) // 3
-                if t_lum > 128 and b_lum > 128:
-                    parts.append("█")
-                elif t_lum > 128:
-                    parts.append("▀")
-                elif b_lum > 128:
-                    parts.append("▄")
-                else:
-                    parts.append(" ")
-            else:
+                t = t and sum(top[:3]) // 3 > 128
+                b = b and sum(bot[:3]) // 3 > 128
+                parts.append("█" if t and b else "▀" if t else "▄" if b else " ")
+            elif t and b:
                 parts.append(f"{_fg(top[0], top[1], top[2], color_mode)}{_bg(bot[0], bot[1], bot[2], color_mode)}▀")
+            elif t or b:
+                color = top if t else bot
+                # Restore default background after any preceding opaque cell.
+                parts.append(f"\x1b[49m{_fg(color[0], color[1], color[2], color_mode)}" + ("▀" if t else "▄"))
+            else:
+                parts.append("\x1b[0m ")
         if color_mode != "none":
             parts.append("\x1b[0m")
         lines.append("".join(parts))
@@ -381,36 +407,30 @@ _BRAILLE_OFFSETS = [
 def _render_braille(img: Image.Image, width: int, aspect: float, color_mode: str) -> list[str]:
     target_h = max(1, int(aspect * width * 0.5))
     pixel_w = width * 2
-    pixel_h = target_h * 4
-    rgb = img.resize((pixel_w, pixel_h)).convert("RGB")
-    gray = img.resize((pixel_w, pixel_h)).convert("L")
-    rgb_pixels = list(rgb.getdata())
-    gray_pixels = list(gray.getdata())
-    lines: list[str] = []
+    sampled = _avatar_samples(img, (pixel_w, target_h * 4))
+    pixels = list(sampled.getdata())
+    gray = list(sampled.convert("L").getdata())
+    lines = []
     for row in range(target_h):
-        parts: list[str] = []
+        parts = []
         for col in range(width):
             mask = 0
-            r_sum = g_sum = b_sum = 0
-            samples = 0
+            colors = []
+            opaque = False
             for dx, dy, bit in _BRAILLE_OFFSETS:
-                px = col * 2 + dx
-                py = row * 4 + dy
+                px, py = col * 2 + dx, row * 4 + dy
                 idx = py * pixel_w + px
-                if gray_pixels[idx] > 128:
+                r, g, b, alpha = pixels[idx]
+                opaque = opaque or alpha > 0
+                if gray[idx] > 128 and _alpha_visible(alpha, px, py):
                     mask |= bit
-                pr, pg, pb = rgb_pixels[idx]
-                r_sum += pr
-                g_sum += pg
-                b_sum += pb
-                samples += 1
-            ch = chr(0x2800 + mask)
-            if color_mode == "none":
+                    colors.append((r, g, b))
+            ch = chr(0x2800 + mask) if opaque else " "
+            if color_mode == "none" or not colors:
                 parts.append(ch)
             else:
-                r = r_sum // samples
-                g = g_sum // samples
-                b = b_sum // samples
+                # Only lit dots contribute color; transparent RGB is irrelevant.
+                r, g, b = (sum(c[i] for c in colors) // len(colors) for i in range(3))
                 parts.append(f"{_fg(r, g, b, color_mode)}{ch}")
         if color_mode != "none":
             parts.append("\x1b[0m")

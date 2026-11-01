@@ -6,9 +6,9 @@ from collections.abc import Iterator
 from io import BytesIO
 from typing import Any
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageChops, ImageDraw, ImageFont, ImageOps
 
-from gitfetch.images import fetch_avatar_image
+from gitfetch.images import avatar_render, fetch_avatar_image
 from gitfetch.language_icons import language_icon_data_uri, language_icon_image
 from gitfetch.modules.builtin import ModuleResult
 from gitfetch.terminal_text import cell_width, clip_text, sanitize_styled_text, sanitize_text
@@ -144,7 +144,14 @@ def _embed_avatar_data(url: str | None, size: int) -> str | None:
 
 def _avatar_image(url: str | None, size: int) -> Image.Image | None:
     image = fetch_avatar_image(url)
-    return image.resize((size, size)) if image else None
+    if image is None:
+        return None
+    # Keep the existing square/circular slot, fitting non-square sources inside
+    # it without stretching. Padding is genuinely transparent, not black.
+    fitted = ImageOps.contain(image, (size, size), Image.Resampling.LANCZOS)
+    canvas = Image.new("RGBA", (size, size))
+    canvas.paste(fitted, ((size - fitted.width) // 2, (size - fitted.height) // 2))
+    return canvas
 
 
 def _font(size: int) -> ImageFont.ImageFont:
@@ -170,6 +177,7 @@ def _module_lines_text(modules: list[ModuleResult], name: str) -> list[str]:
     return []
 
 
+@avatar_render
 def render_card_svg(config: dict[str, Any], user: dict[str, Any], modules: list[ModuleResult]) -> str:
     palette = dict(CARD_PALETTE)
     palette.update(config["display"].get("card_palette", {}) or {})
@@ -272,6 +280,7 @@ def render_card_svg(config: dict[str, Any], user: dict[str, Any], modules: list[
     return "\n".join(parts)
 
 
+@avatar_render
 def render_card_png(config: dict[str, Any], user: dict[str, Any], modules: list[ModuleResult], path) -> None:
     palette = dict(CARD_PALETTE)
     palette.update(config["display"].get("card_palette", {}) or {})
@@ -290,7 +299,7 @@ def render_card_png(config: dict[str, Any], user: dict[str, Any], modules: list[
     if avatar:
         mask = Image.new("L", (avatar_size, avatar_size), 0)
         ImageDraw.Draw(mask).ellipse((0, 0, avatar_size, avatar_size), fill=255)
-        img.paste(avatar, (32, 32), mask)
+        img.paste(avatar, (32, 32), ImageChops.multiply(mask, avatar.getchannel("A")))
         text_x += avatar_size + 24
 
     login = str(user.get("login", ""))
@@ -347,6 +356,7 @@ def render_card_png(config: dict[str, Any], user: dict[str, Any], modules: list[
     img.save(path, "PNG")
 
 
+@avatar_render
 def render_summary_card_svg(
     config: dict[str, Any],
     title: str,
@@ -392,6 +402,7 @@ def render_summary_card_svg(
     return "\n".join(parts)
 
 
+@avatar_render
 def render_summary_card_png(
     config: dict[str, Any],
     title: str,
@@ -417,7 +428,7 @@ def render_summary_card_png(
     if avatar:
         mask = Image.new("L", (avatar_size, avatar_size), 0)
         ImageDraw.Draw(mask).ellipse((0, 0, avatar_size, avatar_size), fill=255)
-        img.paste(avatar, (32, 32), mask)
+        img.paste(avatar, (32, 32), ImageChops.multiply(mask, avatar.getchannel("A")))
         text_x += avatar_size + 20
     title_limit = max(12, (width - text_x - 32) // 13)
     subtitle_limit = max(20, (width - text_x - 32) // 7)

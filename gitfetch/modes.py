@@ -20,9 +20,10 @@ from gitfetch.config import (
     set_override,
 )
 from gitfetch.github_api import GitHubAPIError, GitHubClient
+from gitfetch.images import AvatarLoader, AvatarPolicy, avatar_context, avatar_render
 from gitfetch.modules import MODULE_HANDLERS, available_module_metadata, build_module_list, load_plugin_modules
 from gitfetch.modules.builtin import GRAPHQL_MODULES, ModuleResult
-from gitfetch.providers import create_provider_client
+from gitfetch.providers import create_provider_client, provider_base_url
 from gitfetch.render import (
     SPLIT_GAP,
     apply_margin,
@@ -94,9 +95,15 @@ def _client_for(args: argparse.Namespace, config: dict[str, Any]) -> GitHubClien
         ttl_seconds=int(config["cache"]["ttl_seconds"]),
         bypass_read=bool(getattr(args, "refresh", False)),
     )
-    return create_provider_client(config, token=token, cache=cache, offline=bool(getattr(args, "offline", False)))
+    client = create_provider_client(config, token=token, cache=cache, offline=bool(getattr(args, "offline", False)))
+    config["_avatar_loader"] = AvatarLoader(AvatarPolicy.from_cache(
+        cache, provider=client.provider_name, instance=provider_base_url(config, client.provider_name),
+        token=token, mode=config["profile"]["mode"], offline=bool(getattr(args, "offline", False)),
+    ))
+    return client
 
 
+@avatar_render
 def _render_with_lines(
     config: dict[str, Any],
     output_format: str,
@@ -554,14 +561,14 @@ def handle_compare_command(args: argparse.Namespace) -> int:
         text = module_lines(visible, enabled_color, palette)
         columns.append(text)
         if config["display"].get("avatar") and output_format in {"ansi", "plain"}:
-            avatars.append(
-                render_avatar(
-                    ctx.user.get("avatar_url"),
-                    width=column_width,
-                    style=config["display"].get("avatar_style", "ascii"),
-                    color_mode=avatar_color,
+            with avatar_context(config["_avatar_loader"]):
+                avatar = render_avatar(
+                    ctx.user.get("avatar_url"), width=column_width,
+                    style=config["display"].get("avatar_style", "ascii"), color_mode=avatar_color,
                     ramp=config["display"]["ascii_ramp"],
                 )
+            avatars.append(
+                avatar
             )
         else:
             avatars.append([])

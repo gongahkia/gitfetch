@@ -1,12 +1,12 @@
 #####################   林明 · Alex Rivera
-&&###SSSSSSSSSSS###&&   @alex-dev · GitHub
+&&###SS##SSS##SS###&&   @alex-dev · GitHub
 &&SSSSSSS#&#SSSSSSS&&   创造有用的软件 · café · 👩🏽‍💻 · مرحبا بالعالم ·
 &&SSSS#@@*!!$@#SSSS&&   创造有用的软件 · café · 👩🏽‍💻 · مرحبا بالعالم · …
-&&SSSS#*:!!!:*#SSSS&&   Singapore   Open Source Collective   alex.example
-@&SSSSS#$***$#SSSSS&@   42 public repos   1,280 followers
-@&SSSS&@$$$$$@&SSSS&@   87 following   0 gists   7 years on platform
-@&SS#$*********$#SS&@
-$@#S#***********#S#@$   Languages · bytes
+&&SSSS#!:!!!:!#SSSS&&   Singapore   Open Source Collective   alex.example
+@&SSS#S#$***$#S#SSS&@   42 public repos   1,280 followers
+@&SSSS&@@$$$@@&SSSS&@   87 following   0 gists   7 years on platform
+@&SSS$*!!***!!*$SSS&@
+$@SS#!*********!#SS@$   Languages · bytes
 $$@&#@*********@#&@$$   20/42 repos scanned · selected repos · partial
 $$$$$@$%%%%%%%$@$$$$$   Python      ━━━━━━━━━━· ·   73.0%
                         TypeScript  ━━· · · · · ·   16.0%

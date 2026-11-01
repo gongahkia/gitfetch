@@ -56,11 +56,18 @@ class VisualPolishTests(unittest.TestCase):
         plan = self.plan(80, 40, details=True)
         python = next(r for r in plan.rows if r.module == "languages" and r.text.startswith("Python"))
         rail = [s for s in python.spans if s.role in {"accent", "track"}]
-        filled = sum(cell_width(s.text) for s in rail if s.role == "accent")
+        filled = sum(s.text.count("━") + s.text.count("╸") / 2 for s in rail if s.role == "accent")
         width = sum(cell_width(s.text) for s in rail)
         self.assertLessEqual(abs(filled / width - 7300 / 10000), 0.5 / width)
         self.assertTrue(python.text.endswith("73.0%"))
         self.assertNotIn("73.7%", self.output(plan))
+
+    def test_small_positive_values_keep_a_visible_endcap(self):
+        plan = self.plan(80, 40, details=True)
+        for name in ("Rust", "Shell"):
+            row = next(r for r in plan.rows if r.module == "languages" and r.text.startswith(name))
+            self.assertTrue(any(s.text for s in row.spans if s.role == "accent"))
+            self.assertIn("╸", row.text)
 
     def test_narrow_tall_languages_use_lists_even_in_details(self):
         for width in (30, 40, 50):
@@ -159,6 +166,14 @@ class VisualPolishTests(unittest.TestCase):
         module = ModuleResult("plugin", "Plugin", ["x" * 26 + " (--details)", "x" * 26 + " `--no-color`"], {})
         plan = self.plan(30, 40, document=self.build(module), details=True)
         self.assertEqual(re.findall(r"--[A-Za-z][A-Za-z0-9-]*", self.output(plan)), ["--details", "--no-color"])
+
+    def test_auth_instructions_preserve_flags_environment_names_and_config_keys(self):
+        for env in ("GITHUB_TOKEN", "GITLAB_TOKEN", "BITBUCKET_TOKEN", "GITEA_TOKEN", "FORGEJO_TOKEN", "CODEBERG_TOKEN"):
+            module = ModuleResult("pinned", "Pinned", [f"requires --token, {env}, or profile.token_command"], {},
+                                  measurements={"pinned": Measurement(availability="auth_required")})
+            plan = self.plan(30, 40, document=self.build(module), details=True)
+            for token in ("--token", env, "profile.token_command"):
+                self.assertTrue(any(token in row.text for row in plan.rows), (env, token))
 
     def test_clipped_biography_does_not_publish_a_partial_flag(self):
         user = {**self.user, "bio": "a" * 20 + " --details more words " * 5}

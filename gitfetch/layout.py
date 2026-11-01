@@ -371,7 +371,9 @@ def _languages(content: LanguageDistribution, width: int, height: int, details: 
             continue
         if not compact and fractions and bar_width >= 8:
             ratio = min(1.0, max(0.0, entry.value / denominator))  # type: ignore[operator]
-            filled = round(ratio * bar_width)
+            half_steps = max(1 if ratio > 0 else 0, round(ratio * bar_width * 2))
+            filled, partial = divmod(half_steps, 2)
+            active = "━" * filled + ("╸" if partial else "")
             label = _clip(entry.language, name_width)
             if cell_width(entry.language) > name_width:
                 if details:
@@ -379,9 +381,9 @@ def _languages(content: LanguageDistribution, width: int, height: int, details: 
                 else:
                     clipped_name = True
             pad = " " * (name_width - cell_width(label))
-            empty = bar_width - filled
+            empty = bar_width - filled - partial
             track = ("· " * ((empty + 1) // 2))[:empty]
-            result.append(Row((Span(label + pad + "  "), Span("━" * filled, "accent"),
+            result.append(Row((Span(label + pad + "  "), Span(active, "accent"),
                                Span(track, "track"), Span("  " + " " * (suffix_width - cell_width(suffix)) + suffix))))
         else:
             if cell_width(entry.language) <= name_width and name_width + cell_width(suffix) + 2 <= width:
@@ -535,15 +537,16 @@ def _section(section: PresentationSection, width: int, height: int, details: boo
     else:
         rows = _wrap(section.title, width, "heading")
         cap = max(2, height // 3)
+        status_notice = any(m.availability != "available" for m in section.measurements.values())
         for index, line in enumerate(section.lines):
             line, shortened = (line, False) if details else _bounded(line, width, cap)
             condensed |= shortened
-            rows.extend(_literal(line, width))
+            rows.extend(_wrap(line, width) if status_notice else _literal(line, width))
             if not details and len(rows) > cap:
                 condensed |= len(rows) > cap or index + 1 < len(section.lines)
                 rows = rows[:cap]
                 break
-        if any(m.availability != "available" for m in section.measurements.values()):
+        if status_notice:
             priority, minimum = 2, min(2, len(rows))
     # Preserve meaningful metadata absent from display lines. Specialized views
     # carry their own coverage; generic sections and metrics need notices too.

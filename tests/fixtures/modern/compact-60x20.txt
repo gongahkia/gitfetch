@@ -1,11 +1,11 @@
 ##################   Alex Rivera
 &&#SSSSSSSSSSSS#&&   @alex-dev · GitHub
-&#SSS##&%%@##SSS#&   Building thoughtful developer tools an…
-&#SSS#*!:!!*#SSS#&   Singapore   Open Source Collective
+&#SSS##&%%&##SSS#&   Building thoughtful developer tools an…
+&#SSS#*::::*#SSS#&   Singapore   Open Source Collective
 @&SSSS&%**%&SSSS&@   42 public repos   1,280 followers
-@&SS#@$$%%$$@#SS&@   87 following   0 gists
-@&SS$********$SS&@   7 years on platform
-$@&#$********$#&@$
+@&SSS@$$%%$$@SSS&@   87 following   0 gists
+$&SS%!******!%SS&$   7 years on platform
+$@&S$********$S&@$
 $$$@@$%%%%%%$@@$$$   Languages · bytes
                      20/42 selected repos · partial
                      Python      73.0%

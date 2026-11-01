@@ -118,8 +118,10 @@ explicit primary-language/prevalence labels; multi-label prevalence need not sum
 to 100%. Unknown/zero denominators use labeled values without ratio bars.
 Repository sample/failed/missing/coverage information remains on the document and
 is shown as space permits, with sampled/partial scope retained in compact labels.
-Language rails use 8–16 cells, a heavy line for measured fill and sparse dotted
-empty space, with aligned numeric labels. They do not form solid block rectangles
+Language rails use 8–16 cells, a heavy line for measured fill, a half-line endcap
+for fractional/small positive values, and sparse dotted empty space, with aligned
+numeric labels. Glyphs are quantized; the numeric values retain their precision.
+They do not form solid block rectangles
 in monochrome. Below 52 **content** columns, including tall panes and details,
 languages use aligned lists. Short normal viewports also use compact lists;
 extra terminal height does not force bars into a narrow information column.
@@ -181,7 +183,10 @@ wrapping also keeps flag names together; clipping backs up before a flag instead
 of displaying a broken prefix. A flag wider than the entire pane becomes `…`;
 widening the pane is necessary to display it whole, including in details.
 Raw document/plugin data and JSON keep their original values. No indicator is
-added just for removing spacing. `--details` removes
+added just for removing spacing. Authentication/status instructions wrap at words
+so provider environment-variable names and configuration keys remain usable in
+30-column panes; ordinary plugin indentation/empty lines retain literal wrapping.
+`--details` removes
 height caps and density truncation, preserves enabled visible sections and all
 generic lines, expands already-collected calendars, wraps width safely, and adds
 no requests. Module-level limits still apply. Classic already prints enabled
@@ -322,3 +327,84 @@ Verdict: **PASS**. **NOT VERIFIED:** physical terminals/fonts, live providers,
 personal credentials and a Homebrew installation. The six opt-in tests stayed
 skipped. No graphics protocols, asset-cache redesign or graphical export redesign
 was started. The planner/render boundary is ready for Tranche 05.
+
+## Tranche 04.1 verification record
+
+Started on `main` at `292f97230b59c06be9e15583f05e469843b6eb51`, with a
+clean worktree. The incoming snapshot is
+`/tmp/gitfetch-tranche041-incoming-f95n_tw8`. Another process committed earlier
+work in progress as `1a0cc65f951b56c929c50dc1fd7cf8ac9b28462f`; that commit
+and the subsequent working changes were preserved. This task issued no commit,
+tag, release, reset, rebase, amend or publish commands.
+
+Runtime edits are limited to `layout.py` and four lines in `render.py`.
+`plan_profile`, avatar allocation/asset behavior, the presentation/measurement
+models, providers, modules, CLI, configuration, dependencies, JSON and exports
+retain their implementations. The public README has no edits in this pass.
+Changes are section formatting, safe hint/flag wrapping, density and spacing
+policy, and foreground roles. Numeric units, full denominators, selected-entry
+order, contribution observations and semantic metadata are not modified.
+
+Added `test_visual_polish.py`: 27 deterministic tests covering thin/fractional
+rails, aligned values, 30–50-column lists, width-and-height density, intact hints
+at widths 1–51, literal/quoted flags, long URLs, all six provider token names,
+partial/missing samples, zero versus unavailable, contributions/unknown gaps,
+secondary statistics, Unicode, plugin text, section order, safety and foreground
+contrast. All 354 incoming test cases and their test files were preserved.
+The fixture helper now covers ten dimensions and fifteen golden previews;
+five new previews are narrow/tall 30×40, tiny 40×12, slim 50×40, explicit no-color
+and a narrow generic plugin. The original ten previews were deliberately updated
+for the visual changes above, not for any provider/API/schema change.
+
+| Exact command/check | Result |
+| --- | --- |
+| `.venv/bin/python -m unittest discover -s tests` before edits | 354 discovered: 348 passed, 6 skipped |
+| `.venv/bin/python -m unittest discover -s tests` (3.12.14) | 381 discovered: 375 passed, 6 skipped |
+| `/tmp/gitfetch-foundation-310/bin/python -m unittest discover -s tests` (3.10.21) | Same 381/375/6 |
+| `.venv/bin/python -m unittest discover -s tests -p test_visual_polish.py` | 27 passed |
+| `/tmp/gitfetch-foundation-312/bin/ruff check gitfetch tests installer` | PASS |
+| `/tmp/gitfetch-foundation-312/bin/mypy gitfetch` | PASS, 20 files, Python 3.10 target |
+| `/tmp/gitfetch-foundation-310/bin/python -m compileall -q gitfetch` | PASS |
+| `uv pip check --python .venv/bin/python` | PASS |
+| `uv pip check --python /tmp/gitfetch-foundation-310/bin/python` | PASS |
+| `uv pip check --python /tmp/gitfetch-foundation-312/bin/python` | PASS |
+| `git diff --check` | PASS, including separate added-file whitespace checks |
+| `PYTHONPATH=/home/gongahkia/coding/projects/gitfetch .venv/bin/python /tmp/gitfetch-tranche041-compatibility.py` | 160 byte-identical incoming/classic ANSI/plain/JSON/SVG/card outputs |
+
+Existing pipeline tests also verify PNG byte parity, unchanged language request
+counts, one execution per module/plugin, configuration precedence and watch
+behavior. Source checks confirm that all runtime files other than layout/render
+are byte-identical to the incoming snapshot, and the planner and avatar-gate
+functions themselves are unchanged. The final runtime matches the installed
+wheel byte for byte.
+
+Packaging used a separate source copy to preserve the editable installation:
+
+```sh
+/tmp/gitfetch-foundation-312/bin/python -m build --no-isolation --sdist --wheel /tmp/gitfetch-tranche041-package-l6r_aazk/source --outdir /tmp/gitfetch-tranche041-package-l6r_aazk/dist
+uv pip install --python /tmp/gitfetch-foundation-312/bin/python --no-deps --link-mode copy --reinstall --target /tmp/gitfetch-tranche041-package-l6r_aazk/installed /tmp/gitfetch-tranche041-package-l6r_aazk/dist/gitfetch-2.0.0-py3-none-any.whl
+# From /tmp, outside the checkout:
+PYTHONPATH=/tmp/gitfetch-tranche041-package-l6r_aazk/installed /tmp/gitfetch-foundation-312/bin/python -m unittest discover -s /home/gongahkia/coding/projects/gitfetch/tests
+```
+
+Both artifacts built successfully; the installed-wheel suite passed 381/375/6.
+Installed import-path, version/help, parser, narrow/no-color preview and JSON
+smoke checks passed on both Python versions using
+`/tmp/gitfetch-tranche041-wheel-smoke.py`, with `PYTHONPATH` set to the installed
+root and repository tests directory. The installed console entrypoint still
+reports `gitfetch 2.0.0`. The existing missing-root-`LICENSE` and deprecated
+`project.license` warnings remain; dependency/release metadata was untouched.
+
+`PYTHONPATH=tests .venv/bin/python tests/benchmark_layout.py` observed median
+1.10–1.57 ms/plan across ten dimensions (five batches of 100), excluding provider
+collection, images and ANSI painting. This is a local observation, not an
+end-to-end speedup claim. The new standard preview is 22 rows, tiny 40×12 is 10,
+compact 60×20 is 18, 100×30 is 28, large 140×40 is 38 and wide/short 200×15 is 13.
+Narrow/tall 30×40 is 38 rows; details remains uncapped and is 46 rows at 80 columns.
+
+Verdict: **PASS**. **NOT VERIFIED:** physical font/terminal appearance, including
+opaque/transparent background combinations, and live providers. The six opt-in
+tests stayed skipped. Terminals narrower than a full flag necessarily show a
+marker instead; actual fonts can differ from wcwidth's narrow ambiguous-width
+policy. Review the deterministic previews above in the target terminal. No
+Tranche 05 work, graphics protocols, asset caching or export redesign was started.

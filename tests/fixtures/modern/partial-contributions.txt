@@ -1,18 +1,18 @@
 ###########################   Alex Rivera
 &&&&###################&&&&   @alex-dev · GitHub
-&&&#SSSSSSSSSSSS#SSSSSS#&&&   Building thoughtful developer tools and small, useful things for the
+&&&#SSSSSS##SSSS#SSSSSS#&&&   Building thoughtful developer tools and small, useful things for the
 &&#SSSSSSSS#&@@#SSSSSSSS#&&   open web.
-&&#SSSSS#@@%!!!*@@#SSSSS#&&   Singapore   Open Source Collective   alex.example
+&&#SSSSS#@@%:!:*@@#SSSSS#&&   Singapore   Open Source Collective   alex.example
 &&#SSSSS#!:!!!!!:!#SSSSS#&&   42 public repos   1,280 followers
-@@#SSSSSS&*!!!!!*&SSSSSS#@@   87 following   0 gists   7 years on platform
+@@#SSSS#S&*!:::!*&S#SSSS#@@   87 following   0 gists   7 years on platform
 @@#SSSSSSS#@$$$@#SSSSSSS#@@
 @@#SSSS#@$%%%%%%%$@#SSSS#@@   Languages · bytes
-@@#SSS&*************&SSS#@@   20/42 repos scanned · selected repos · partial
-@@#SSS%*************%SSS#@@   Python      ━━━━━━━━━━━━· ·   73.0%
-$$@#SS@*************@SS#@$$   TypeScript  ━━━· · · · · · ·  16.0%
+@@#SSS&*!*********!*&SSS#@@   20/42 repos scanned · selected repos · partial
+@$#S#S%!***********!%S#S#$@   Python      ━━━━━━━━━━━╸· ·   73.0%
+$$@#SS@!***********!@SS#@$$   TypeScript  ━━╸· · · · · · ·  16.0%
 $$$$@&#@***********@#&@$$$$   Go          ━· · · · · · · ·   6.0%
-$$$$$$$$$$%%%%%%%$$$$$$$$$$   Rust        · · · · · · · ·    3.0%
-                              Shell       · · · · · · · ·    1.0%
+$$$$$$$$$$%%%%%%%$$$$$$$$$$   Rust        ╸· · · · · · · ·   3.0%
+                              Shell       ╸· · · · · · · ·   1.0%
 
                               Activity · contributions · unknown coverage
                               Shown: 2025-12-28 – 2026-01-28
