@@ -212,3 +212,123 @@ There is no claim of lower live-network latency or an end-to-end speedup.
 Native graphics, asset conditional-HTTP revalidation, terminal alpha blending,
 physical font/background validation and graphical export redesign remain outside
 05A. The prepared RGBA API is ready for 05B; no 05B implementation was started.
+
+## Verification record
+
+Started on `main` at `1a0cc65f951b56c929c50dc1fd7cf8ac9b28462f`.
+The incoming worktree contained `docs/responsive-design.md`, `gitfetch/layout.py`,
+`tests/test_visual_polish.py` and six modern preview files (100×30, details,
+140×40, monochrome, no-avatar and partial contributions). The snapshot is
+`/tmp/gitfetch-tranche05a-incoming-nrltv6nh`. Incoming planner, presentation,
+semantics, provider, configuration, API-cache and polish-test sources were
+verified byte-identical after this work. All 381 incoming tests remain present.
+
+Other processes committed work in progress as
+`6b507d67b29464cd62159b04ef615db2bee27afc` and
+`14ac337285f506e631fac82f6f79eee9eb68bb0c`. Those commits were preserved. This
+implementation issued no commit, tag, publish, release, reset, rebase or amend
+commands. The tested runtime also matches the installed wheel byte for byte.
+
+Runtime changes are confined to `images.py`, new `avatar_cache.py`, `render.py`,
+`formats.py`, `cli.py` and `modes.py`. Added `avatar_fixtures.py`,
+`test_avatar_assets.py`, `test_avatar_rendering.py`, `preview_avatars.py`,
+`benchmark_avatars.py`, eight source images and eight preview text files.
+Updated eleven modern avatar goldens, this document, the responsive-design asset
+reference, and only two README usage lines (`--offline`, `--refresh`). No runtime
+dependencies or release metadata changed.
+
+The 77 new tests comprise 42 acquisition/cache/preparation/security tests and
+35 encoder/export/CLI tests, with additional provider/style/format subcases.
+They cover every supported provider, warm/cold/refresh/offline/cache-disabled
+loading, scopes, safe failures, symlinks, permissions, atomic replacement, quotas,
+malformed lengths, redirect policy, image limits, geometry, orientation, alpha,
+animation, no-avatar/JSON, plugin configuration, watch frames, API/asset request
+counts and shared decoding. A separate 450-input deterministic corruption probe
+found no uncaught exceptions. No live-provider test was enabled.
+
+| Command/check | Actual result |
+| --- | --- |
+| `.venv/bin/python -m unittest discover -s tests` before edits | 381 discovered: 375 passed, 6 skipped |
+| `.venv/bin/python -m unittest discover -s tests` (3.12.14, Pillow 11.3.0) | 458 discovered: 452 passed, 6 skipped |
+| `/tmp/gitfetch-foundation-310/bin/python -m unittest discover -s tests` (3.10.21, Pillow 11.3.0) | Same 458/452/6 |
+| `/tmp/gitfetch-foundation-312/bin/ruff check gitfetch tests installer` | PASS |
+| `/tmp/gitfetch-foundation-312/bin/mypy gitfetch` | PASS, 21 files, Python 3.10 target |
+| `/tmp/gitfetch-foundation-310/bin/python -m compileall -q gitfetch` | PASS |
+| `uv pip check --python .venv/bin/python` | PASS |
+| `uv pip check --python /tmp/gitfetch-foundation-310/bin/python` | PASS |
+| `uv pip check --python /tmp/gitfetch-foundation-312/bin/python` | PASS |
+| `git diff --check` plus added-file whitespace validation | PASS |
+| `PYTHONPATH=/home/gongahkia/coding/projects/gitfetch .venv/bin/python /tmp/gitfetch-tranche05a-compatibility.py` | 160 byte-identical incoming/current classic ANSI/plain/JSON/SVG/card outputs with avatar encoding held constant |
+| `PYTHONPATH=tests .venv/bin/python /tmp/gitfetch-tranche05a-modern-parity.py` | 90 byte-identical incoming/current modern text/layout outputs across all preview cases and three styles, with avatar encoding held constant |
+
+Builds used a separate source copy, preserving editable-install metadata:
+
+```sh
+/tmp/gitfetch-foundation-312/bin/python -m build --no-isolation --sdist --wheel /tmp/gitfetch-tranche05a-package-13fnjele/source --outdir /tmp/gitfetch-tranche05a-package-13fnjele/dist
+uv pip install --python /tmp/gitfetch-foundation-312/bin/python --no-deps --link-mode copy --target /tmp/gitfetch-tranche05a-package-13fnjele/installed /tmp/gitfetch-tranche05a-package-13fnjele/dist/gitfetch-2.0.0-py3-none-any.whl
+# From /tmp, outside the checkout, on both interpreters:
+PYTHONPATH=/tmp/gitfetch-tranche05a-package-13fnjele/installed /tmp/gitfetch-foundation-312/bin/python -m unittest discover -s /home/gongahkia/coding/projects/gitfetch/tests
+PYTHONPATH=/tmp/gitfetch-tranche05a-package-13fnjele/installed /tmp/gitfetch-foundation-310/bin/python -m unittest discover -s /home/gongahkia/coding/projects/gitfetch/tests
+PYTHONPATH=/tmp/gitfetch-tranche05a-package-13fnjele/installed:/home/gongahkia/coding/projects/gitfetch/tests /tmp/gitfetch-foundation-312/bin/python /tmp/gitfetch-tranche05a-wheel-smoke.py
+PYTHONPATH=/tmp/gitfetch-tranche05a-package-13fnjele/installed:/home/gongahkia/coding/projects/gitfetch/tests /tmp/gitfetch-foundation-310/bin/python /tmp/gitfetch-tranche05a-wheel-smoke.py
+PYTHONPATH=/tmp/gitfetch-tranche05a-package-13fnjele/installed /tmp/gitfetch-tranche05a-package-13fnjele/installed/bin/gitfetch --version
+```
+
+Both artifacts built. Each installed-wheel full suite passed 458/452/6; both
+smoke runs verified installed import origins, CLI help/version/parser, modern
+previews, raw nullable JSON, oriented RGBA preparation and strict offline loading.
+The console entrypoint reports the existing `gitfetch 2.0.0` version. All 21
+runtime Python files match the build source and installed wheel. The build
+retains the preexisting missing-root-`LICENSE` and deprecated `project.license`
+warnings; release metadata is outside this tranche.
+
+Additional minimum-dependency check:
+
+```sh
+uv pip install --python /tmp/gitfetch-foundation-310/bin/python --no-deps --target /tmp/gitfetch-avatar-pillow10 Pillow==10.0.0
+PYTHONPATH=/tmp/gitfetch-avatar-pillow10:tests /tmp/gitfetch-foundation-310/bin/python -m unittest test_avatar_assets test_avatar_rendering.AvatarEncoderTests test_avatar_rendering.AvatarExportTests
+PYTHONPATH=/tmp/gitfetch-avatar-pillow10 /tmp/gitfetch-foundation-310/bin/python -m unittest discover -s tests
+```
+
+Pillow 10.0.0 passes all **66 image-focused tests**, confirming the new preparation,
+cache, encoders and export-image APIs work at the minimum dependency version.
+Its optional full-suite run has **3 errors** (449 passed, 6 skipped): organization
+PNG output's existing font fallback cannot draw `★` when Arial/Helvetica/DejaVu
+are unavailable and Pillow supplies its Latin-1 bitmap default. This was
+reproduced directly against the incoming `formats.py`, with avatars disabled.
+It is a preexisting font/export issue, not an image-loader regression; no font
+redesign or unrelated export change was mixed into 05A. The required full suites
+on Python 3.10 and 3.12 with Pillow 11.3 remain passing. This limitation must be
+carried into the dedicated export/font work.
+
+Local benchmark (`PYTHONPATH=tests .venv/bin/python tests/benchmark_avatars.py`),
+1024×1024 RGBA PNG, 129,825 compressed bytes, 28-cell encoders, median of five
+batches of 20 operations (memo/setup: 10,000 per batch):
+
+| Operation | ms |
+| --- | ---: |
+| Mocked HTTP read, excluding decode/network latency | 0.0191 |
+| Mocked cold fetch + decode + atomic cache write | 14.1021 |
+| Warm disk cache + decode | 17.2652 |
+| Frame memo hit, no decode | 0.0041 |
+| Validate/decode/prepare only | 12.5309 |
+| RGBA fit to 96×96 | 15.5479 |
+| ASCII resize + encode, mono / truecolor | 13.3724 / 13.7758 |
+| Half-block resize + encode, mono / truecolor | 14.3555 / 13.9964 |
+| Braille resize + encode, mono / truecolor | 15.5056 / 15.6345 |
+| No-avatar loader setup + scoped binding only | 0.0051 |
+
+These are local observations, not end-to-end speedup claims. Warm disk reuse
+removes downloads, not decoding; with mocked HTTP, it need not beat an in-memory
+cold response. The frame memo avoids both. No-avatar timing excludes planner,
+provider and CLI startup work.
+
+Verdict: **PASS for Tranche 05A**, with the preexisting optional Pillow-10 PNG
+font failure explicitly recorded above. **NOT VERIFIED:** physical terminals,
+live-provider avatars/redirects, Windows ACL behavior, macOS and Homebrew
+installation. POSIX permission/atomicity behavior was tested on Linux. ANSI alpha
+is approximate, and socket timeout is not a hard whole-request deadline. No
+05B graphics, probes, cursor operations or native transport were implemented.
+
+Pillow references: [Image limits and resampling](https://pillow.readthedocs.io/en/stable/reference/Image.html),
+[format/metadata handling](https://pillow.readthedocs.io/en/stable/handbook/image-file-formats.html).

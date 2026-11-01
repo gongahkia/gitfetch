@@ -6,7 +6,7 @@ COMMANDS = ["config", "modules", "repo", "org", "compare", "completions", "token
 TOP_FLAGS = [
     "--user", "--provider", "--base-url", "--profile", "--token", "--mode", "--config", "--set", "--format",
     "--save", "--no-avatar", "--margin", "--color", "--no-color", "--theme",
-    "--avatar-style", "--avatar-color", "--watch", "--refresh",
+    "--avatar-style", "--avatar-color", "--avatar-renderer", "--graphics-info", "--watch", "--refresh",
     "--offline", "--version", "--help", "--presentation", "--details",
 ]
 FORMAT_VALUES = ["ansi", "plain", "json", "svg", "card", "png"]
@@ -39,6 +39,7 @@ _gitfetch_completions() {{
         --format)        COMPREPLY=( $(compgen -W "{formats}" -- "$cur") ); return ;;
         --provider)      COMPREPLY=( $(compgen -W "{providers}" -- "$cur") ); return ;;
         --theme)         COMPREPLY=( $(compgen -W "{themes}" -- "$cur") ); return ;;
+        --avatar-renderer) COMPREPLY=( $(compgen -W "auto kitty text" -- "$cur") ); return ;;
         --avatar-style)  COMPREPLY=( $(compgen -W "{styles}" -- "$cur") ); return ;;
         --avatar-color)  COMPREPLY=( $(compgen -W "{colors}" -- "$cur") ); return ;;
         --presentation)  COMPREPLY=( $(compgen -W "modern classic" -- "$cur") ); return ;;
@@ -111,6 +112,7 @@ _gitfetch() {{
         --format) compadd -- {formats}; return ;;
         --provider) compadd -- {providers}; return ;;
         --theme) compadd -- {themes}; return ;;
+        --avatar-renderer) compadd -- auto kitty text; return ;;
         --avatar-style) compadd -- {styles}; return ;;
         --avatar-color) compadd -- {colors}; return ;;
         --presentation) compadd -- modern classic; return ;;
@@ -239,6 +241,8 @@ complete -c gitfetch -l no-color -d "Force colors off"
 complete -c gitfetch -l details -d "Show all enabled details"
 complete -c gitfetch -l presentation -x -a "modern classic" -d "Profile presentation"
 complete -c gitfetch -l theme -x -a "{themes}" -d "Color theme"
+complete -c gitfetch -l avatar-renderer -x -a "auto kitty text" -d "Avatar backend"
+complete -c gitfetch -l graphics-info -d "Explain graphics selection"
 complete -c gitfetch -l avatar-style -x -a "{styles}" -d "Avatar style"
 complete -c gitfetch -l avatar-color -x -a "{colors}" -d "Avatar color"
 complete -c gitfetch -l watch -x -d "Re-render every N seconds"

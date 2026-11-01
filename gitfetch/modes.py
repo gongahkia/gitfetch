@@ -72,6 +72,8 @@ def _apply_common_overrides(args: argparse.Namespace, config: dict[str, Any]) ->
         config["_color_force"] = "off"
     if getattr(args, "avatar_style", None):
         config["display"]["avatar_style"] = args.avatar_style
+    if getattr(args, "avatar_renderer", None):
+        config["display"]["avatar_renderer"] = args.avatar_renderer
     if getattr(args, "avatar_color", None):
         config["display"]["avatar_color"] = args.avatar_color
     normalize_config(config)

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
+from dataclasses import asdict
 from pathlib import Path
 
 import requests
@@ -28,8 +30,10 @@ from gitfetch.modules import MODULE_HANDLERS, available_module_metadata, build_m
 from gitfetch.modules.builtin import GRAPHQL_MODULES, ModuleResult
 from gitfetch.presentation import build_profile_document
 from gitfetch.providers import create_provider_client, provider_base_url
-from gitfetch.render import render_output
+from gitfetch.render import color_enabled, modern_enabled, render_output
 from gitfetch.semantics import Measurement
+from gitfetch.terminal_capabilities import discover_terminal, resolve_preferences, select_avatar_backend
+from gitfetch.terminal_output import TerminalWriteError, emit_native_profile
 from gitfetch.terminal_text import sanitize_text
 
 
@@ -54,6 +58,8 @@ def build_parser() -> argparse.ArgumentParser:
     from gitfetch.render import THEMES
     parser.add_argument("--theme", choices=sorted(THEMES.keys()), help="Color theme")
     parser.add_argument("--avatar-style", choices=["ascii", "halfblock", "braille"], help="Avatar rendering style")
+    parser.add_argument("--avatar-renderer", choices=["auto", "kitty", "text"], help="Interactive modern avatar backend; explicit styles force text unless overridden")
+    parser.add_argument("--graphics-info", action="store_true", help="Explain graphics selection without fetching a profile or reading terminal input")
     parser.add_argument("--avatar-color", choices=["auto", "none", "256", "truecolor"], help="Avatar color mode (auto follows --color/--no-color)")
     parser.add_argument("--presentation", choices=["modern", "classic"], help="Terminal profile presentation (auto: modern on an ANSI TTY, classic otherwise)")
     parser.add_argument("--details", action="store_true", help="Show all enabled profile content; allow scrolling without collecting additional data")
@@ -134,6 +140,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
+        if args.graphics_info and args.command:
+            raise ConfigError("--graphics-info applies to profile output; omit the subcommand")
         if args.command == "config":
             return handle_config_command(args)
         if args.command == "modules":
@@ -152,6 +160,13 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "token":
             return handle_token_command(args)
         return handle_render_command(args)
+    except TerminalWriteError as exc:
+        print(f"gitfetch: {exc}", file=sys.stderr)
+        return 130 if exc.interrupted else 1
+    except KeyboardInterrupt:
+        return 130
+    except BrokenPipeError:
+        return 1
     except ConfigError as exc:
         print(sanitize_text(f"config error: {exc}"), file=sys.stderr)
         return 2
@@ -379,7 +394,8 @@ def handle_render_command(args: argparse.Namespace) -> int:
     if args.watch and args.save:
         raise ConfigError("--watch cannot be combined with --save")
     path = Path(args.config_path) if args.config_path else config_path()
-    config = load_config(path)
+    saved_display: set[str] = set()
+    config = load_config(path, explicit_display=saved_display)
     apply_named_profile(config, args.profile)
     for item in args.set:
         if "=" not in item:
@@ -411,6 +427,8 @@ def handle_render_command(args: argparse.Namespace) -> int:
         config["_color_force"] = "off"
     if args.avatar_style:
         config["display"]["avatar_style"] = args.avatar_style
+    if args.avatar_renderer:
+        config["display"]["avatar_renderer"] = args.avatar_renderer
     if args.avatar_color:
         config["display"]["avatar_color"] = args.avatar_color
     if args.presentation:
@@ -420,6 +438,21 @@ def handle_render_command(args: argparse.Namespace) -> int:
     if args.save:
         config["_captured_output"] = True
     normalize_config(config)
+    preferences = resolve_preferences(config, saved=saved_display, overrides=args.set,
+                                      renderer=args.avatar_renderer, style=args.avatar_style)
+    capabilities = discover_terminal(sys.stdout, sys.stdin)
+    if not capabilities.writable and not args.save:
+        raise TerminalWriteError()
+    decision = select_avatar_backend(
+        capabilities, preferences, output_format=args.format or config["display"].get("format", "ansi"),
+        modern=modern_enabled(config, args.format or config["display"].get("format", "ansi")),
+        avatar=config["display"].get("avatar", True), captured=bool(args.save), watch=bool(args.watch),
+        color_allowed=color_enabled(config, "ansi") and config["display"].get("theme") != "mono",
+    )
+    if args.graphics_info:
+        print(json.dumps({"capabilities": asdict(capabilities), "decision": asdict(decision),
+                          "asset_not_checked": True, "active_probe": False}, indent=2))
+        return 0
     load_plugin_modules(config)
 
     username = config["profile"].get("username", "").strip()
@@ -472,7 +505,13 @@ def handle_render_command(args: argparse.Namespace) -> int:
         output_format = args.format or config["display"].get("format", "ansi")
         # A fresh frame memo lets watch respect TTL/refresh without retaining
         # decoded images indefinitely. Acquisition remains lazy in renderers.
-        render_config = {**config, "_avatar_loader": AvatarLoader(avatar_policy)}
+        render_config = {**config, "display": dict(config["display"]), "_avatar_loader": AvatarLoader(avatar_policy)}
+        if capabilities.interactive and output_format == "ansi" and modern_enabled(config, output_format) and not args.save:
+            render_config["display"]["avatar_style"] = decision.text_style
+            if decision.color != "auto":
+                render_config["display"]["avatar_color"] = decision.color
+        if decision.backend == "kitty" and emit_native_profile(render_config, document, decision, sys.stdout):
+            return
         if output_format == "png":
             from gitfetch.formats import render_card_png
 

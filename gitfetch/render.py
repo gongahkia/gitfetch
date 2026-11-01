@@ -149,6 +149,33 @@ def modern_enabled(config: dict[str, Any], output_format: str) -> bool:
     return output_format == "ansi" and not config.get("_captured_output", False) and sys.stdout.isatty()
 
 
+def _paint_modern_rows(config: dict[str, Any], rows, output_format: str) -> list[str]:
+    display = config["display"]
+    enabled = color_enabled(config, output_format)
+    palette = palette_for(config)
+    # Descriptive text follows the user's foreground instead of a low-contrast
+    # dark theme gray. Only decorative rail dots use the dim palette role.
+    roles = {"identity": "title", "heading": "key", "text": "value", "muted": "value", "track": "dim",
+             "accent": "accent", "stat": "title", "notice": "accent"}
+    text_lines = []
+    for row in rows:
+        parts = []
+        for span in row.spans:
+            code = palette[roles[span.role]]
+            # Existing avatar-color preference also bounds modern text colors;
+            # reduced palettes never receive truecolor escape sequences.
+            if display.get("avatar_color") == "256" and isinstance(code, str) and code.startswith("#"):
+                sequence = _fg(int(code[1:3], 16), int(code[3:5], 16), int(code[5:7], 16), "256")
+                parts.append(f"{sequence}{span.text}\x1b[0m" if enabled else span.text)
+            else:
+                painted = colorize(span.text, code, enabled)
+                if enabled and display.get("theme") != "mono" and span.role in {"identity", "heading"}:
+                    painted = f"\x1b[1m{painted}\x1b[0m"
+                parts.append(painted)
+        text_lines.append("".join(parts))
+    return text_lines
+
+
 def _render_modern(config: dict[str, Any], document: ProfileDocument, output_format: str) -> str:
     from gitfetch.layout import AvatarGeometry, Preferences, Viewport, avatar_may_fit, plan_profile
 
@@ -166,28 +193,7 @@ def _render_modern(config: dict[str, Any], document: ProfileDocument, output_for
     image = _load_avatar(document.avatar_reference) if avatar_may_fit(viewport, preferences) and document.avatar_reference else None
     geometry = AvatarGeometry(*image.size) if image is not None else None
     plan = plan_profile(document, viewport, preferences, geometry, reference_date=reference)
-    enabled = color_enabled(config, output_format)
-    palette = palette_for(config)
-    # Descriptive text follows the user's foreground instead of a low-contrast
-    # dark theme gray. Only decorative rail dots use the dim palette role.
-    roles = {"identity": "title", "heading": "key", "text": "value", "muted": "value", "track": "dim",
-             "accent": "accent", "stat": "title", "notice": "accent"}
-    text_lines = []
-    for row in plan.rows:
-        parts = []
-        for span in row.spans:
-            code = palette[roles[span.role]]
-            # Existing avatar-color preference also bounds modern text colors;
-            # reduced palettes never receive truecolor escape sequences.
-            if display.get("avatar_color") == "256" and isinstance(code, str) and code.startswith("#"):
-                sequence = _fg(int(code[1:3], 16), int(code[3:5], 16), int(code[5:7], 16), "256")
-                parts.append(f"{sequence}{span.text}\x1b[0m" if enabled else span.text)
-            else:
-                painted = colorize(span.text, code, enabled)
-                if enabled and display.get("theme") != "mono" and span.role in {"identity", "heading"}:
-                    painted = f"\x1b[1m{painted}\x1b[0m"
-                parts.append(painted)
-        text_lines.append("".join(parts))
+    text_lines = _paint_modern_rows(config, plan.rows, output_format)
     avatar_lines = _render_avatar_image(
         image, plan.avatar_width, preferences.avatar_style,
         "none" if display.get("theme") == "mono" else _effective_avatar_color(config, output_format),

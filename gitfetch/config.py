@@ -119,6 +119,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "margin": 0,
         "format": "ansi",
         "avatar_style": "ascii",
+        "avatar_renderer": "auto",
         "avatar_color": "auto",
         "svg_font_family": "BigBlue Terminal 437, BigBlue Terminal Plus, monospace",
         "card_language_icons": True,
@@ -425,7 +426,7 @@ def migrate_legacy_username() -> str | None:
     return None
 
 
-def load_config(path: Path | None = None) -> dict[str, Any]:
+def load_config(path: Path | None = None, *, explicit_display: set[str] | None = None) -> dict[str, Any]:
     target = path or config_path()
     data = copy.deepcopy(DEFAULT_CONFIG)
     if target.exists():
@@ -434,6 +435,13 @@ def load_config(path: Path | None = None) -> dict[str, Any]:
         except (OSError, tomllib.TOMLDecodeError) as exc:
             raise ConfigError(f"invalid config at {target}: {exc}") from exc
         _merge(data, parsed)
+        display = parsed.get("display", {})
+        if isinstance(display, dict) and "avatar_renderer" not in display and {"avatar_style", "ascii_ramp"} & display.keys():
+            # Preserve legacy choices through later config-management writes,
+            # which otherwise serialize the new automatic default explicitly.
+            data["display"]["avatar_renderer"] = "text"
+        if explicit_display is not None and isinstance(parsed.get("display"), dict):
+            explicit_display.update(parsed["display"])
     else:
         legacy_username = migrate_legacy_username()
         if legacy_username:
@@ -536,6 +544,8 @@ def normalize_config(config: dict[str, Any]) -> None:
     style = config["display"].get("avatar_style", "ascii")
     if style not in {"ascii", "halfblock", "braille"}:
         raise ConfigError(f"display.avatar_style '{style}' is not a known style")
+    if config["display"].get("avatar_renderer", "auto") not in {"auto", "kitty", "text"}:
+        raise ConfigError("display.avatar_renderer must be auto, kitty, or text")
     color_mode = config["display"].get("avatar_color", "auto")
     if color_mode not in {"auto", "none", "256", "truecolor"}:
         raise ConfigError(f"display.avatar_color '{color_mode}' must be auto, none, 256, or truecolor")
