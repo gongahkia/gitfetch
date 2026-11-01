@@ -5,6 +5,7 @@ import os
 import re
 import shutil
 import sys
+from collections.abc import Sequence
 from typing import Any
 
 from PIL import Image
@@ -12,6 +13,7 @@ from wcwidth import iter_graphemes
 
 from gitfetch.images import fetch_avatar_image
 from gitfetch.modules.builtin import ModuleResult
+from gitfetch.presentation import PresentationSection, ProfileDocument, build_profile_document
 from gitfetch.terminal_text import cell_width, sanitize_text
 
 COLOR_CODES = {
@@ -107,6 +109,8 @@ def render_output(
     user: dict[str, Any],
     modules: list[ModuleResult],
     output_format: str,
+    *,
+    document: ProfileDocument | None = None,
 ) -> str:
     visible_modules = [module for module in modules if not module.hidden]
     if output_format == "json":
@@ -120,17 +124,21 @@ def render_output(
     if output_format == "card":
         from gitfetch.formats import render_card_svg
         return render_card_svg(config, user, visible_modules)
+    if document is None:
+        provider = config.get("profile", {}).get("provider", "github")
+        instance = config.get("providers", {}).get(provider, {}).get("base_url", "")
+        document = build_profile_document(user, modules, provider=provider, instance=instance)
     if output_format == "svg":
         from gitfetch.formats import render_terminal_svg
         forced = {**config, "_color_force": "on", "_skip_terminal_clamp": True}
-        return render_terminal_svg(_render_visual(forced, user, visible_modules, "ansi"), config)
-    return _render_visual(config, user, visible_modules, output_format)
+        return render_terminal_svg(_render_visual(forced, document.avatar_reference, document.sections, "ansi"), config)
+    return _render_visual(config, document.avatar_reference, document.sections, output_format)
 
 
 def _render_visual(
     config: dict[str, Any],
-    user: dict[str, Any],
-    visible_modules: list[ModuleResult],
+    avatar_reference: str | None,
+    visible_modules: Sequence[ModuleResult | PresentationSection],
     output_format: str,
 ) -> str:
     enabled_color = color_enabled(config, output_format)
@@ -153,7 +161,7 @@ def _render_visual(
                 available = usable_cols
         if available >= MIN_AVATAR_WIDTH:
             avatar = render_avatar(
-                user.get("avatar_url"),
+                avatar_reference,
                 width=min(configured_width, available),
                 style=config["display"].get("avatar_style", "ascii"),
                 color_mode=_effective_avatar_color(config, output_format),
@@ -176,7 +184,7 @@ def apply_margin(text: str, margin: int) -> str:
     return "\n".join(pad + line for line in text.split("\n"))
 
 
-def module_lines(modules: list[ModuleResult], color_enabled: bool, palette: dict[str, ThemeValue]) -> list[str]:
+def module_lines(modules: Sequence[ModuleResult | PresentationSection], color_enabled: bool, palette: dict[str, ThemeValue]) -> list[str]:
     lines: list[str] = []
     for module in modules:
         title = sanitize_text(module.title)

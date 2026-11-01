@@ -25,7 +25,8 @@ from gitfetch.config import (
 from gitfetch.github_api import GitHubAPIError
 from gitfetch.modules import MODULE_HANDLERS, available_module_metadata, build_module_list, load_plugin_modules
 from gitfetch.modules.builtin import GRAPHQL_MODULES, ModuleResult
-from gitfetch.providers import create_provider_client
+from gitfetch.presentation import build_profile_document
+from gitfetch.providers import create_provider_client, provider_base_url
 from gitfetch.render import render_output
 from gitfetch.semantics import Measurement
 from gitfetch.terminal_text import sanitize_text
@@ -451,6 +452,10 @@ def handle_render_command(args: argparse.Namespace) -> int:
             if hide_if_empty and not result.lines:
                 result.hidden = True
             module_results.append(result)
+        document = build_profile_document(
+            context.user, module_results, provider=client.provider_name,
+            instance=provider_base_url(config, client.provider_name), context=context,
+        )
         output_format = args.format or config["display"].get("format", "ansi")
         if output_format == "png":
             from gitfetch.formats import render_card_png
@@ -458,7 +463,7 @@ def handle_render_command(args: argparse.Namespace) -> int:
             render_card_png(config, context.user, [m for m in module_results if not m.hidden], _png_output_path(args))
             print(f"wrote {args.save}")
             return
-        _write_or_print(render_output(config, context.user, module_results, output_format), args)
+        _write_or_print(render_output(config, context.user, module_results, output_format, document=document), args)
 
     if args.watch:
         if args.watch < 1:

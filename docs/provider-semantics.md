@@ -245,7 +245,13 @@ preexisting packaging warnings below. Final suite: **204 discovered, 198 passed,
 contract and terminal-text test files, terminal-text utilities, renderer,
 dependencies, formula and original foundation report remain byte-for-byte
 unchanged. Changes to its CLI/formats/modes files are layered metric fixes.
-No commits, tags or releases were created; HEAD and branch remain unchanged.
+This agent issued no commit, tag, publish or release commands. During final
+validation another process advanced `main` through commits `63b0523`
+(`cleanedup`) and `607c166` (`tanaka`), incorporating the work in progress.
+The latter HEAD was observed at the final inspection; runtime and test sources
+were byte-identical to the final tested build copy. These intervening commits
+were preserved. The initial HEAD and dirty worktree recorded above remain the
+starting-state audit, rather than a claim that HEAD never changed.
 
 Added: `gitfetch/semantics.py`, `tests/test_semantics.py`, this report.
 Modified for this tranche: `gitfetch/cli.py`, `gitfetch/formats.py`,
