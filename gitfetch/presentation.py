@@ -140,11 +140,15 @@ class ProfileDocument:
 
 def _mapping(value: Any) -> dict:
     # Do not invoke arbitrary plugin mapping/iteration/conversion protocols.
-    return value if type(value) is dict else value.copy() if type(value) is MappingProxyType else {}
+    if isinstance(value, dict):
+        return dict.copy(value)
+    return value.copy() if type(value) is MappingProxyType else {}
 
 
 def _sequence(value: Any) -> Sequence:
-    return value if type(value) in (list, tuple) else ()
+    if isinstance(value, list):
+        return tuple(list.__iter__(value))
+    return tuple(tuple.__iter__(value)) if isinstance(value, tuple) else ()
 
 
 def _text(value: Any) -> str | None:
@@ -184,9 +188,12 @@ def _measurement(value: Any, *, provider: str, unit: str, scope: str, source: st
 
 
 def _identity(user: dict, provider: str, instance: str) -> ProfileIdentity:
-    return ProfileIdentity(provider, instance, *(_text(user.get(key)) for key in (
-        "login", "name", "bio", "company", "location", "blog", "avatar_url", "html_url", "created_at", "updated_at",
-    )))
+    return ProfileIdentity(
+        provider=provider, instance=instance, username=_text(user.get("login")), display_name=_text(user.get("name")),
+        biography=_text(user.get("bio")), company=_text(user.get("company")), location=_text(user.get("location")),
+        website=_text(user.get("blog")), avatar_reference=_text(user.get("avatar_url")), url=_text(user.get("html_url")),
+        created_at=_text(user.get("created_at")), updated_at=_text(user.get("updated_at")),
+    )
 
 
 def _metrics(name: str, data: Any, metadata: Mapping[str, Measurement], provider: str) -> MetricGroup | None:
@@ -247,6 +254,8 @@ def _days(weeks: Any) -> tuple[ContributionDay, ...]:
                 observed = date.fromisoformat(row["date"])
             except (KeyError, TypeError, ValueError):
                 continue
+            if observed.isoformat() != row["date"]:
+                continue
             count = row.get("contributionCount")
             if count is None or (type(count) is int and count >= 0):
                 observations[observed] = ContributionDay(observed, count)
@@ -254,9 +263,16 @@ def _days(weeks: Any) -> tuple[ContributionDay, ...]:
 
 
 def _observed_coverage(days: tuple[ContributionDay, ...], measurement: Measurement) -> Measurement:
-    if (days and measurement.coverage == "complete"
-            and (any(day.count is None for day in days) or (days[-1].date - days[0].date).days + 1 != len(days))):
-        return replace(measurement, coverage="partial")
+    if not days and measurement.coverage == "complete":
+        return replace(measurement, coverage="unknown")
+    if days and measurement.coverage == "complete":
+        bounds = [days[0].date, days[-1].date]
+        try:
+            bounds.extend(date.fromisoformat(bound) for bound in (measurement.start, measurement.end) if bound is not None)
+        except (TypeError, ValueError):
+            return replace(measurement, coverage="unknown")
+        if any(day.count is None for day in days) or (max(bounds) - min(bounds)).days + 1 != len(days):
+            return replace(measurement, coverage="partial")
     return measurement
 
 
@@ -362,7 +378,7 @@ def _notices(sections: Sequence[PresentationSection]) -> tuple[PresentationNotic
     return tuple(notices.values())
 
 
-def build_profile_document(user: Mapping[str, Any], modules: Sequence[ModuleResult], *,
+def build_profile_document(user: dict[str, Any], modules: Sequence[ModuleResult], *,
                            provider: str, instance: str = "", context: GitHubContext | None = None) -> ProfileDocument:
     """Consume the resolved visible module results, without evaluating anything.
 
@@ -396,6 +412,8 @@ def build_profile_document(user: Mapping[str, Any], modules: Sequence[ModuleResu
                 metadata.setdefault(metric.identifier, metric.measurement)
         elif isinstance(content, (LanguageDistribution, ContributionActivity, RepositoryList, RecentActivity)):
             metadata[name] = content.measurement
+            if isinstance(content, ContributionActivity) and content.calendar_measurement != content.measurement:
+                metadata.setdefault("calendar", content.calendar_measurement)
         lines = (module.lines,) if isinstance(module.lines, str) else _sequence(module.lines)
         sections.append(PresentationSection(name, _display_text(module.title), tuple(_display_text(line) for line in lines),
                                              content, MappingProxyType(metadata), _snapshot(module.data)))

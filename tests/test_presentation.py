@@ -228,7 +228,8 @@ class PresentationTests(unittest.TestCase):
 
     def test_whole_profile_language_completeness_is_preserved(self):
         result, metadata = self.language_result()
-        metadata = replace(metadata, complete_profile=True, coverage="complete")
+        metadata = replace(metadata, complete_profile=True, coverage="complete", failed=0, missing=0,
+                           attempted=8, eligible_repositories=8, sampling_policy="all repositories")
         result.measurements["languages"] = metadata
         document = self.build(result)
         self.assertTrue(document.sections[0].content.measurement.complete_profile)
@@ -285,6 +286,9 @@ class PresentationTests(unittest.TestCase):
         activity = self.build(result).sections[0].content
         self.assertEqual(activity.measurement.coverage, "partial")
         self.assertEqual(measured.coverage, "complete")  # Original metadata was not mutated.
+        document = self.build(result)
+        self.assertEqual(document.sections[0].measurements["contributions"].coverage, "partial")
+        self.assertTrue(any(notice.kind == "coverage" for notice in document.notices))
 
     def test_missing_calendar_and_successful_empty_response_are_distinct(self):
         missing = ModuleResult("contributions", "Contributions", ["unavailable"], [], measurements={"contributions": Measurement(availability="unavailable")})
@@ -448,6 +452,50 @@ class PresentationTests(unittest.TestCase):
         self.assertEqual(document.identity.biography, payload)
         self.assertEqual(document.sections[0].lines, (payload,))
         self.assertEqual(document.sections[0].raw_data["user"]["bio"], payload)
+
+    def test_unsupported_metric_inside_stats_stays_unsupported(self):
+        measurement = Measurement(None, "bitbucket", "count", "followers", "unsupported", reason="not supported")
+        result = ModuleResult("stats", "Stats", ["followers: unsupported"], {}, measurements={"followers": measurement})
+        document = self.build(result, provider="bitbucket")
+        metric = document.sections[0].content.metrics[0]
+        self.assertIsNone(metric.measurement.value)
+        self.assertEqual(metric.measurement.availability, "unsupported")
+
+    def test_declared_calendar_bounds_do_not_hide_unknown_edge_dates(self):
+        measurement = Measurement(1, "github", "contributions", coverage="complete", start="2024-01-01", end="2024-01-03")
+        result = ModuleResult("contributions", "Contributions", [], weeks(("2024-01-02", 1)), measurements={"contributions": measurement})
+        activity = self.build(result).sections[0].content
+        self.assertEqual(activity.measurement.coverage, "partial")
+        self.assertEqual(len(activity.days), 1)
+
+    def test_noncanonical_dates_are_rejected_consistently_across_python_versions(self):
+        result = ModuleResult("contributions", "Contributions", [], weeks(("20240101", 1), ("2024-01-02", 0)))
+        activity = self.build(result).sections[0].content
+        self.assertEqual([(day.date.isoformat(), day.count) for day in activity.days], [("2024-01-02", 0)])
+
+    def test_full_calendar_uncertainty_is_available_as_a_notice(self):
+        selected = Measurement(1, "forgejo", "activity records", "visible activity", coverage="complete", start="2024-01-03", end="2024-01-03")
+        source = replace(selected, value=3, coverage="unknown", start="2024-01-01", reason="coverage not reported")
+        self.context.measurements["contributions"] = source
+        self.context.graphql = {"contributionsCollection": {"contributionCalendar": {"weeks": weeks(("2024-01-01", 2), ("2024-01-03", 1))}}}
+        result = ModuleResult("contributions", "Contributions", [], weeks(("2024-01-03", 1)), measurements={"contributions": selected})
+        document = self.build(result, provider="forgejo", context=self.context)
+        self.assertIs(document.sections[0].measurements["calendar"], source)
+        self.assertTrue(any(("contributions", "calendar") in notice.subjects and notice.measurement.coverage == "unknown"
+                            for notice in document.notices))
+
+    def test_plugin_container_subclasses_do_not_execute_conversion_hooks(self):
+        class PluginDict(dict):
+            def get(self, *args):
+                raise AssertionError("plugin get hook executed")
+        class PluginLines(list):
+            def __iter__(self):
+                raise AssertionError("plugin iterator executed")
+        data = PluginDict({"value": None})
+        result = ModuleResult("plugin", "Plugin", PluginLines(["hello"]), data)
+        document = self.build(result)
+        self.assertEqual(document.sections[0].lines, ("hello",))
+        self.assertIs(document.sections[0].raw_data, data)  # Extended opaque payload is retained intact.
 
 
 if __name__ == "__main__":
