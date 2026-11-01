@@ -7,7 +7,7 @@ TOP_FLAGS = [
     "--user", "--provider", "--base-url", "--profile", "--token", "--mode", "--config", "--set", "--format",
     "--save", "--no-avatar", "--margin", "--color", "--no-color", "--theme",
     "--avatar-style", "--avatar-color", "--watch", "--refresh",
-    "--offline", "--version", "--help",
+    "--offline", "--version", "--help", "--presentation", "--details",
 ]
 FORMAT_VALUES = ["ansi", "plain", "json", "svg", "card", "png"]
 
@@ -41,6 +41,7 @@ _gitfetch_completions() {{
         --theme)         COMPREPLY=( $(compgen -W "{themes}" -- "$cur") ); return ;;
         --avatar-style)  COMPREPLY=( $(compgen -W "{styles}" -- "$cur") ); return ;;
         --avatar-color)  COMPREPLY=( $(compgen -W "{colors}" -- "$cur") ); return ;;
+        --presentation)  COMPREPLY=( $(compgen -W "modern classic" -- "$cur") ); return ;;
         --mode)          COMPREPLY=( $(compgen -W "{modes}" -- "$cur") ); return ;;
         --profile)       COMPREPLY=( $(compgen -W "$(_gitfetch_profile_names)" -- "$cur") ); return ;;
         completions)     COMPREPLY=( $(compgen -W "bash zsh fish" -- "$cur") ); return ;;
@@ -112,6 +113,7 @@ _gitfetch() {{
         --theme) compadd -- {themes}; return ;;
         --avatar-style) compadd -- {styles}; return ;;
         --avatar-color) compadd -- {colors}; return ;;
+        --presentation) compadd -- modern classic; return ;;
         --mode) compadd -- {modes}; return ;;
         --profile) _gitfetch_profiles; return ;;
     esac
@@ -169,6 +171,8 @@ _gitfetch() {{
         '--margin[Character margin]:n:' \\
         '--color[Force colors on]' \\
         '--no-color[Force colors off]' \\
+        '--details[Show all enabled details]' \\
+        '--presentation[Profile presentation]:presentation:(modern classic)' \\
         '--theme[Color theme]:theme:({themes})' \\
         '--avatar-style[Avatar style]:style:({styles})' \\
         '--avatar-color[Avatar color]:color:({colors})' \\
@@ -232,6 +236,8 @@ complete -c gitfetch -l no-avatar -d "Disable avatar"
 complete -c gitfetch -l margin -x -d "Character margin"
 complete -c gitfetch -l color -d "Force colors on"
 complete -c gitfetch -l no-color -d "Force colors off"
+complete -c gitfetch -l details -d "Show all enabled details"
+complete -c gitfetch -l presentation -x -a "modern classic" -d "Profile presentation"
 complete -c gitfetch -l theme -x -a "{themes}" -d "Color theme"
 complete -c gitfetch -l avatar-style -x -a "{styles}" -d "Avatar style"
 complete -c gitfetch -l avatar-color -x -a "{colors}" -d "Avatar color"

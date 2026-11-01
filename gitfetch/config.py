@@ -113,6 +113,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "theme": "default",
         "color": True,
         "layout": "split",
+        "presentation": "auto",
+        "details": False,
         "show_empty": False,
         "margin": 0,
         "format": "ansi",
@@ -517,6 +519,8 @@ def normalize_config(config: dict[str, Any]) -> None:
         raise ConfigError("profile.mode must be 'public' or 'viewer'")
     if config["display"].get("layout") not in {"split", "stack"}:
         raise ConfigError("display.layout must be 'split' or 'stack'")
+    if config["display"].get("presentation", "auto") not in {"auto", "modern", "classic"}:
+        raise ConfigError("display.presentation must be 'auto', 'modern', or 'classic'")
     for key, message, minimum in (
         ("avatar_width", "display.avatar_width must be greater than 0", 1),
         ("heatmap_weeks", "display.heatmap_weeks must be greater than 0", 1),

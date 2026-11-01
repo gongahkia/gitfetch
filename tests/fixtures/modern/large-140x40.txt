@@ -1,0 +1,38 @@
+##############################   Alex Rivera
+###&######################&###   @alex-dev · GitHub
+&&&##SSSSSSSSSSSSSSSSSSSS##&&&   Building thoughtful developer tools and small, useful things for the open web.
+&&#SSSSSSSS##S######SSSSSSS#&&   Singapore   Open Source Collective   alex.example
+&&#SSSSSS#SS#$**%&SS#SSSSSS#&&
+&&#SSSSSS#%%*!!!!!%%#SSSSSS#&&   42 public repos   1,280 followers   87 following   0 gists
+&&#SSSSSS#*:!!!!!!:*#SSSSSS#&&   7 years on platform
+@@#SSSSSSS&*!!!!!!*&SSSSSSS#@@   Languages · bytes · selected repos · partial
+@@&SSSSSSSSS&$%%$&SSSSSSSSS&@@   Python      ████████████████░░░░░░  73.0%
+@@&SSSSSS&@$$$$$$$$@&SSSSSS&@@   TypeScript  ████░░░░░░░░░░░░░░░░░░  16.0%
+@@&SSSS#%************%#SSSS&@@   Go          █░░░░░░░░░░░░░░░░░░░░░  6.0%
+@@&SSS#%**************%#SSS&@@   Rust        █░░░░░░░░░░░░░░░░░░░░░  3.0%
+@$@SSS#****************#SSS@$@   Shell       ░░░░░░░░░░░░░░░░░░░░░░  1.0%
+$$$@#SS@**************@SS#@$$$   selected repos · partial coverage · 20/42 repos scanned
+$$$$$@&&@%**********%@&&@$$$$$   Activity · contributions · complete coverage
+$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$   Shown: 2025-11-06 – 2026-01-28
+                                 Su    ▆ ▄ ▂ · ▆ ▄ ▂ · ▇ · ▃ ▁
+                                 Mo    ▂ █ · ▄ ▂ · ▇ ▅ · ▁ █ ▆
+                                 Tu    ▆ · ▂ · ▇ ▅ ▃ · █ ▆ ▄ ▂
+                                 We    · · ▇ ▅ ▃ ▁ · ▆ ▄ ▂ █ ▆
+                                 Th  · ▇ ▅ ▃ ▁ █ · ▄ ▂ █ ▆ ▄
+                                 Fr  ▅ ▃ ▁ █ ▆ · ▂ █ ▆ ▄ ▂ ·
+                                 Sa  ▁ █ ▆ ▄ · █ ▆ ▄ ▂ · · ▅
+                                 · zero  ? unknown  ▁–█ 1–12
+                                 417 in window · 2025-11-06 – 2026-01-28
+                                 Streaks
+                                 3 days current observed streak   18 days longest observed streak   417 contributions window total
+                                 Observed window: 2025-11-06 – 2026-01-28
+                                 Pinned
+                                 alex-dev/gitfetch  284 stars · Python
+                                 A beautiful Git profile in your terminal.
+                                 alex-dev/tiny-tools  0 stars · Go
+                                 Small tools, carefully made.
+                                 pinned repositories
+                                 Recent activity · public activity
+                                 2026-01-28T09:00:00Z · PushEvent · alex-dev/gitfetch
+                                 2026-01-27T12:00:00Z · ReleaseEvent · alex-dev/tiny-tools
+                                 More enabled content: --details

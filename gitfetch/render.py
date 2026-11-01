@@ -6,6 +6,7 @@ import re
 import shutil
 import sys
 from collections.abc import Sequence
+from datetime import datetime, timezone
 from typing import Any
 
 from PIL import Image
@@ -132,7 +133,68 @@ def render_output(
         from gitfetch.formats import render_terminal_svg
         forced = {**config, "_color_force": "on", "_skip_terminal_clamp": True}
         return render_terminal_svg(_render_visual(forced, document.avatar_reference, document.sections, "ansi"), config)
+    if output_format in {"ansi", "plain"} and modern_enabled(config, output_format):
+        return _render_modern(config, document, output_format)
     return _render_visual(config, document.avatar_reference, document.sections, output_format)
+
+
+def modern_enabled(config: dict[str, Any], output_format: str) -> bool:
+    """Presentation policy is separate from color, collection and export policy."""
+    choice = config["display"].get("presentation", "auto")
+    if choice != "auto":
+        return choice == "modern"
+    return output_format == "ansi" and not config.get("_captured_output", False) and sys.stdout.isatty()
+
+
+def _render_modern(config: dict[str, Any], document: ProfileDocument, output_format: str) -> str:
+    from gitfetch.layout import AvatarGeometry, Preferences, Viewport, avatar_may_fit, plan_profile
+
+    display = config["display"]
+    terminal = shutil.get_terminal_size((80, 24))
+    viewport = Viewport(terminal.columns, terminal.lines)
+    preferences = Preferences(
+        details=display.get("details", False), layout=display.get("layout", "split"),
+        margin=display.get("margin", 0), avatar=display.get("avatar", True),
+        avatar_width=display.get("avatar_width", 100), avatar_style=display.get("avatar_style", "ascii"),
+    )
+    reference = datetime.now(timezone.utc).date()
+    # Tiny/text-only output need not download an avatar. Source geometry and the
+    # semantic document are measured once; only the final allocation is encoded.
+    image = _load_avatar(document.avatar_reference) if avatar_may_fit(viewport, preferences) and document.avatar_reference else None
+    geometry = AvatarGeometry(*image.size) if image is not None else None
+    plan = plan_profile(document, viewport, preferences, geometry, reference_date=reference)
+    enabled = color_enabled(config, output_format)
+    palette = palette_for(config)
+    roles = {"identity": "title", "heading": "key", "text": "value", "muted": "dim",
+             "accent": "accent", "stat": "title", "notice": "accent"}
+    text_lines = []
+    for row in plan.rows:
+        parts = []
+        for span in row.spans:
+            code = palette[roles[span.role]]
+            # Existing avatar-color preference also bounds modern text colors;
+            # reduced palettes never receive truecolor escape sequences.
+            if display.get("avatar_color") == "256" and isinstance(code, str) and code.startswith("#"):
+                sequence = _fg(int(code[1:3], 16), int(code[3:5], 16), int(code[5:7], 16), "256")
+                parts.append(f"{sequence}{span.text}\x1b[0m" if enabled else span.text)
+            else:
+                painted = colorize(span.text, code, enabled)
+                if enabled and display.get("theme") != "mono" and span.role in {"identity", "heading"}:
+                    painted = f"\x1b[1m{painted}\x1b[0m"
+                parts.append(painted)
+        text_lines.append("".join(parts))
+    avatar_lines = _render_avatar_image(
+        image, plan.avatar_width, preferences.avatar_style,
+        "none" if display.get("theme") == "mono" else _effective_avatar_color(config, output_format),
+        display.get("ascii_ramp", "BS#&@$%*!:."),
+    ) if image is not None and plan.avatar_width else []
+    if avatar_lines and plan.composition == "split":
+        output = combine_split(avatar_lines, text_lines)
+    elif avatar_lines and plan.composition == "stack":
+        output = "\n".join(avatar_lines + ([""] if text_lines else []) + text_lines)
+    else:
+        output = "\n".join(text_lines)
+    return apply_margin(output, plan.margin)
 
 
 def _render_visual(
@@ -236,6 +298,10 @@ def render_avatar(avatar_url: str | None, width: int, style: str, color_mode: st
     img = _load_avatar(avatar_url)
     if img is None:
         return []
+    return _render_avatar_image(img, width, style, color_mode, ramp)
+
+
+def _render_avatar_image(img: Image.Image, width: int, style: str, color_mode: str, ramp: str) -> list[str]:
     source_width, source_height = img.size
     aspect = source_height / source_width
     if style == "halfblock":

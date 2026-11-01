@@ -54,6 +54,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--theme", choices=sorted(THEMES.keys()), help="Color theme")
     parser.add_argument("--avatar-style", choices=["ascii", "halfblock", "braille"], help="Avatar rendering style")
     parser.add_argument("--avatar-color", choices=["auto", "none", "256", "truecolor"], help="Avatar color mode (auto follows --color/--no-color)")
+    parser.add_argument("--presentation", choices=["modern", "classic"], help="Terminal profile presentation (auto: modern on an ANSI TTY, classic otherwise)")
+    parser.add_argument("--details", action="store_true", help="Show all enabled profile content; allow scrolling without collecting additional data")
     parser.add_argument("--watch", type=int, metavar="SECS", help="Re-render every N seconds until interrupted")
     cache_group = parser.add_mutually_exclusive_group()
     cache_group.add_argument("--refresh", action="store_true", help="Bypass cache reads for this run")
@@ -410,6 +412,12 @@ def handle_render_command(args: argparse.Namespace) -> int:
         config["display"]["avatar_style"] = args.avatar_style
     if args.avatar_color:
         config["display"]["avatar_color"] = args.avatar_color
+    if args.presentation:
+        config["display"]["presentation"] = args.presentation
+    if args.details:
+        config["display"]["details"] = True
+    if args.save:
+        config["_captured_output"] = True
     normalize_config(config)
     load_plugin_modules(config)
 

@@ -79,6 +79,9 @@ $ gitfetch --provider bitbucket --user atlassian # render a Bitbucket workspace
 $ gitfetch --provider codeberg --user forgejo # render a Codeberg profile or org
 $ gitfetch --provider gitea --user gitea # render a Gitea.com profile or org
 $ gitfetch --no-avatar # stats only, no ASCII art
+$ gitfetch --presentation modern # responsive terminal profile, also available in captured/plain output
+$ gitfetch --presentation classic # preserve the previous terminal style
+$ gitfetch --details # expand enabled modern sections; may scroll, collects no additional data
 $ gitfetch --token ghp_xxxx # authenticated; also accepts provider env variables such as GITHUB_TOKEN, GITLAB_TOKEN, BITBUCKET_TOKEN, GITEA_TOKEN, FORGEJO_TOKEN, or CODEBERG_TOKEN
 ```
 
