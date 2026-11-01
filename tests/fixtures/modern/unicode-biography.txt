@@ -1,22 +1,22 @@
 #####################   林明 · Alex Rivera
 &&###SSSSSSSSSSS###&&   @alex-dev · GitHub
 &&SSSSSSS#&#SSSSSSS&&   创造有用的软件 · café · 👩🏽‍💻 · مرحبا بالعالم ·
-&&SSSS#@@*!!$@#SSSS&&   创造有用的软件 · café · 👩🏽‍💻 · مرحبا بالعالم ·…
+&&SSSS#@@*!!$@#SSSS&&   创造有用的软件 · café · 👩🏽‍💻 · مرحبا بالعالم · …
 &&SSSS#*:!!!:*#SSSS&&   Singapore   Open Source Collective   alex.example
-@&SSSSS#$***$#SSSSS&@   42 public repos   1,280 followers   87 following
-@&SSSS&@$$$$$@&SSSS&@   0 gists
-@&SS#$*********$#SS&@   7 years on platform
-$@#S#***********#S#@$   Languages · bytes · selected repos · partial
-$$@&#@*********@#&@$$   Python      ████████████████░░░░░░  73.0%
-$$$$$@$%%%%%%%$@$$$$$   TypeScript  ████░░░░░░░░░░░░░░░░░░  16.0%
-                        Go          █░░░░░░░░░░░░░░░░░░░░░  6.0%
-                        selected repos · partial coverage · 20/42 repos scanned
+@&SSSSS#$***$#SSSSS&@   42 public repos   1,280 followers
+@&SSSS&@$$$$$@&SSSS&@   87 following   0 gists   7 years on platform
+@&SS#$*********$#SS&@
+$@#S#***********#S#@$   Languages · bytes
+$$@&#@*********@#&@$$   20/42 repos scanned · selected repos · partial
+$$$$$@$%%%%%%%$@$$$$$   Python      ━━━━━━━━━━· ·   73.0%
+                        TypeScript  ━━· · · · · ·   16.0%
+                        Go          ━· · · · · · ·   6.0%
+
                         Activity · contributions · complete coverage
-                        Shown: 2025-12-04 – 2026-01-28
-                        ▁▆·▆▂▇▃█·█▄·▅▁·▂▆▂▇▃·▄█▄·▅·▆▂▆▂▇·█▄█▄··▁▆▂▆▂·▃█▄█▄·▅▁▆▂▆
+                        Shown: 2025-12-28 – 2026-01-28
+                        ·▅·▆▂▆▂▇·█▄█▄··▁▆▂▆▂·▃█▄█▄·▅▁▆▂▆
                         · zero  ? unknown  ▁–█ 1–12
                         417 in window · 2025-11-06 – 2026-01-28
                         Streaks
                         3 days current observed streak
-                        18 days longest observed streak
                         More enabled content: --details

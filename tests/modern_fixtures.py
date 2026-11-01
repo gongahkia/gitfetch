@@ -13,8 +13,11 @@ from gitfetch.render import render_output
 from gitfetch.semantics import Measurement
 
 REFERENCE = date(2026, 1, 28)
-DIMENSIONS = ((40, 12), (60, 20), (80, 24), (100, 30), (120, 40), (140, 40), (200, 15), (200, 60))
+DIMENSIONS = ((30, 40), (40, 12), (50, 40), (60, 20), (80, 24), (100, 30), (120, 40), (140, 40), (200, 15), (200, 60))
 CASES = {
+    "narrow-tall-30x40": (30, 40, {}),
+    "tiny-40x12": (40, 12, {}),
+    "slim-50x40": (50, 40, {}),
     "standard-80x24": (80, 24, {}),
     "comfortable-100x30": (100, 30, {}),
     "large-140x40": (140, 40, {}),
@@ -23,12 +26,14 @@ CASES = {
     "no-avatar": (80, 24, {"avatar": False}),
     "details": (80, 24, {"details": True}),
     "monochrome": (100, 30, {"theme": "mono"}),
+    "no-color": (80, 24, {"no_color": True}),
     "partial-contributions": (100, 30, {"partial": True}),
     "unicode-biography": (80, 24, {"unicode": True}),
+    "plugin-narrow": (30, 40, {"plugin": True, "secondary": False}),
 }
 
 
-def fixture(provider="github", *, partial=False, unicode=False, secondary=True):
+def fixture(provider="github", *, partial=False, unicode=False, secondary=True, plugin=False):
     user = {"login": "alex-dev", "name": "Alex Rivera", "bio": "Building thoughtful developer tools and small, useful things for the open web.",
             "location": "Singapore", "company": "Open Source Collective", "blog": "alex.example",
             "avatar_url": "https://synthetic.invalid/avatar.png", "created_at": "2018-04-14T00:00:00Z",
@@ -96,6 +101,10 @@ def fixture(provider="github", *, partial=False, unicode=False, secondary=True):
                             {"unsupported": True, "provider": provider, "reason": "no matching profile endpoint"},
                             measurements={module.name: Measurement(provider=provider, availability="unsupported")})
                if module.name in unsupported else module for module in modules]
+    if plugin:
+        modules.append(ModuleResult("plugin", "Local notes", [
+            "  A generic plugin section", "See all enabled content with --details", "", "Untrusted \x1b]0;injected\a notes",
+        ], {"raw": "preserved"}))
     document = build_profile_document(user, modules, provider=provider, instance=f"https://{provider}.example/api")
     return user, modules, document
 
@@ -115,14 +124,17 @@ def avatar_image():
 def preview(case="standard-80x24", *, ansi=False, **overrides):
     columns, rows, settings = CASES[case]
     settings = {**settings, **overrides}
-    user, modules, document = fixture(partial=settings.pop("partial", False), unicode=settings.pop("unicode", False))
+    no_color = settings.pop("no_color", False)
+    user, modules, document = fixture(partial=settings.pop("partial", False), unicode=settings.pop("unicode", False),
+                                      secondary=settings.pop("secondary", True), plugin=settings.pop("plugin", False))
     config = copy.deepcopy(preset_config("minimal"))
     config["display"].update({"presentation": "modern", "avatar": True, "layout": "split", **settings})
-    config["_color_force"] = "on" if ansi else "off"
+    config["_color_force"] = "on" if ansi and not no_color else "off"
     with (mock.patch("gitfetch.render.shutil.get_terminal_size", return_value=os.terminal_size((columns, rows))),
           mock.patch("gitfetch.render._load_avatar", return_value=avatar_image()),
           mock.patch("gitfetch.render.datetime") as clock):
         clock.now.return_value = datetime.combine(REFERENCE, datetime.min.time(), timezone.utc)
         output = render_output(config, user, modules, "ansi" if ansi else "plain", document=document)
-        # Empty split separators contain invisible legacy avatar padding.
-        return "\n".join(line if line.strip() else "" for line in output.split("\n"))
+        # Normalize invisible padding in preview files, including spaces left
+        # before an atomic flag wraps. Runtime plugin whitespace is preserved.
+        return "\n".join(line.rstrip() for line in output.split("\n"))

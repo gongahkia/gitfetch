@@ -5,13 +5,14 @@
 @&SSSS&%**%&SSSS&@   42 public repos   1,280 followers
 @&SS#@$$%%$$@#SS&@   87 following   0 gists
 @&SS$********$SS&@   7 years on platform
-$@&#$********$#&@$   Languages · bytes · sample · partial
-$$$@@$%%%%%%$@@$$$   Python 73.0%   TypeScript 16.0%
-                     Go 6.0%
-                     Activity · contributions · complete
-                     coverage
-                     Shown: 2025-12-21 – 2026-01-28
-                     ▂▇▃·▄█▄·▅·▆▂▆▂▇·█▄█▄··▁▆▂▆▂·▃█▄█▄·▅▁▆▂▆
-                     · zero  ? unknown  ▁–█ 1–12
-                     417 in window · 2025-11-06 – 2026-01-28
+$@&#$********$#&@$
+$$$@@$%%%%%%$@@$$$   Languages · bytes
+                     20/42 selected repos · partial
+                     Python      73.0%
+                     TypeScript  16.0%
+                     Go          6.0%
+
+                     Activity · 417 contributions
+                     complete coverage
+                     2025-11-06 – 2026-01-28
                      More enabled content: --details

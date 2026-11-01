@@ -2,20 +2,21 @@ Alex Rivera
 @alex-dev · GitHub
 Building thoughtful developer tools and small, useful things for the open web.
 Singapore   Open Source Collective   alex.example
-42 public repos   1,280 followers   87 following   0 gists
-7 years on platform
-Languages · bytes · selected repos · partial
-Python      ████████████████░░░░░░  73.0%
-TypeScript  ████░░░░░░░░░░░░░░░░░░  16.0%
-Go          █░░░░░░░░░░░░░░░░░░░░░  6.0%
-selected repos · partial coverage · 20/42 repos scanned
+42 public repos   1,280 followers
+87 following   0 gists   7 years on platform
+
+Languages · bytes
+20/42 repos scanned · selected repos · partial
+Python      ━━━━━━━━━━━━· ·   73.0%
+TypeScript  ━━━· · · · · · ·  16.0%
+Go          ━· · · · · · · ·   6.0%
+
 Activity · contributions · complete coverage
-Shown: 2025-11-10 – 2026-01-28
-▂▆·▇▃█▄█··▅▁▆▂·▂▇▃█▄·▄·▅▁▆·▆▂▇▃█·█▄·▅▁·▂▆▂▇▃·▄█▄·▅·▆▂▆▂▇·█▄█▄··▁▆▂▆▂·▃█▄█▄·▅▁▆▂▆
+Shown: 2025-12-28 – 2026-01-28
+·▅·▆▂▆▂▇·█▄█▄··▁▆▂▆▂·▃█▄█▄·▅▁▆▂▆
 · zero  ? unknown  ▁–█ 1–12
 417 in window · 2025-11-06 – 2026-01-28
 Streaks
 3 days current observed streak   18 days longest observed streak
 417 contributions window total
-Observed window: 2025-11-06 – 2026-01-28
 More enabled content: --details

@@ -1,4 +1,4 @@
-# Responsive terminal profiles (Tranche 04)
+# Responsive terminal profiles (Tranches 04 and 04.1)
 
 ## Boundary and execution
 
@@ -86,6 +86,7 @@ primary information. Source geometry can also make text-only output necessary.
 
 | Viewport | Typical synthetic fixture behavior |
 | --- | --- |
+| 30×40 / 50×40 | Compact language lists; narrow activity summary or bounded sparkline |
 | 40×12 | Text only, primary identity/metrics, small language/activity summaries |
 | 60×20 | Small avatar if feasible, compact languages and dated activity |
 | 80×24 | Balanced split, language bars, compact dated activity; ≤22 rows |
@@ -107,6 +108,9 @@ word-wrapped biography and optional metadata. Statistics pack into horizontal
 strips or short rows, preserving measured zero, unavailable/unsupported/auth
 status and non-public repository scopes. Sections remain in resolved user order;
 the hierarchy does not override custom ordering or resurrect disabled modules.
+Repositories/followers form the primary statistics strip; following, gists and
+account age share a secondary foreground row where possible. Zero gists remain
+available rather than being removed or turned into unavailable data.
 
 Languages use full aggregate denominators, never the sum of displayed entries.
 Bytes use byte percentages. Repository measurements use `n/N repos` bars and
@@ -114,13 +118,22 @@ explicit primary-language/prevalence labels; multi-label prevalence need not sum
 to 100%. Unknown/zero denominators use labeled values without ratio bars.
 Repository sample/failed/missing/coverage information remains on the document and
 is shown as space permits, with sampled/partial scope retained in compact labels.
-The configured module entry limit remains authoritative even in details. Full
+Language rails use 8–16 cells, a heavy line for measured fill and sparse dotted
+empty space, with aligned numeric labels. They do not form solid block rectangles
+in monochrome. Below 52 **content** columns, including tall panes and details,
+languages use aligned lists. Short normal viewports also use compact lists;
+extra terminal height does not force bars into a narrow information column.
+Unit/scope/coverage/sample metadata appears once before entries. Short normal
+views show two languages at ≤15 rows, three at ≤24, five at ≤30 and all selected
+entries above that. The configured module entry limit remains authoritative even in details. Full
 language totals are retained for the denominator, not used to secretly expand
-module selection. Normal density shows up to three entries at ≤24 rows, five at
-≤30, all selected entries above that. Details displays every selected entry.
+module selection. Details displays every selected entry.
 
 Contributions use actual ordered dates and measurements. Compact activity shows
-a dated sparkline; tall/wide layouts use Sunday-first weekday panels. `·` means
+a dated sparkline; tall/wide layouts use Sunday-first weekday panels. Normal
+output below 40 content columns uses a dated summary. Sparklines occupy at most
+32 cells and two thirds of content width; narrow details wraps the collected
+history into dated chunks instead of discarding it. `·` means
 an observed zero, `?` means an unknown date, and `▁`–`█` encodes 1 through the
 labeled peak. Density/glyphs carry meaning without color. Dates absent from the
 document appear only as explicitly unknown chart positions, never measured zero.
@@ -153,10 +166,22 @@ then uses concise contribution/language/statistics/identity allocations. Resolve
 module order remains unchanged. It avoids orphan secondary headings. Hidden or
 unselected modules never appear. Meaningful sampling/status/window labels remain
 part of their sections rather than being converted to successful numeric data.
+Already-condensed views with sufficient height reserve up to two section breaks
+before languages/activity without crowding out their minimum useful content.
+Unused rows after fitting restore spacing at those boundaries first. Pinned
+headings do not repeat “pinned repositories”; streak uncertainty and its matching
+date window are explained together rather than repeated per metric.
 
 Condensation, clipped names/bios, omitted descriptions/URLs, chart cropping or
-omitted sections produces `More enabled content: --details` (shorter in narrow
-widths). No indicator is added just for removing spacing. `--details` removes
+omitted sections produces the longest **complete** hint that fits:
+`More enabled content: --details` (31 cells), `Run --details` (13), or
+`--details` (9). Below nine cells the indicator is just `…`; a truncated flag is
+never printed. A 30-column pane therefore uses `Run --details`. Literal plugin
+wrapping also keeps flag names together; clipping backs up before a flag instead
+of displaying a broken prefix. A flag wider than the entire pane becomes `…`;
+widening the pane is necessary to display it whole, including in details.
+Raw document/plugin data and JSON keep their original values. No indicator is
+added just for removing spacing. `--details` removes
 height caps and density truncation, preserves enabled visible sections and all
 generic lines, expands already-collected calendars, wraps width safely, and adds
 no requests. Module-level limits still apply. Classic already prints enabled
@@ -166,21 +191,28 @@ Modern roles map onto the existing title/key/value/dim/accent palette. No new
 themes or dependencies were added. Identity/headings are bold outside mono;
 language bars and activity use accent plus glyph density. All existing themes
 work, including Dracula, Nord, Gruvbox and Catppuccin. `mono` suppresses avatar
-and text colors. `--no-color` suppresses both as well. Existing
+and text colors. Secondary/descriptive text uses the terminal foreground instead
+of low-contrast dark theme gray; only decorative rail dots use the dim palette.
+No terminal background control is required. `--no-color` suppresses both avatar
+and text colors as well. Existing
 `--avatar-color 256` also maps modern hexadecimal theme colors into the 256-color
 palette; `truecolor`/`auto` retain existing truecolor behavior. There is no new
 terminal capability probe or guarantee about font-specific emoji rendering.
 
 ## Offline previews and manual acceptance
 
-Ten plain-text golden files live in `tests/fixtures/modern/`. They include a
+Fifteen plain-text golden files live in `tests/fixtures/modern/`. They include a
 synthetic fixed-date profile and a locally generated image; no credentials or
-network are used. Invisible avatar padding on empty separator rows is normalized
+network are used. Invisible trailing padding, including empty separator rows, is normalized
 in these preview files. They supplement semantic/geometric assertions, not replace
 them. From the repository root:
 
 ```sh
 PYTHONPATH=tests .venv/bin/python tests/preview_modern.py --case standard-80x24
+PYTHONPATH=tests .venv/bin/python tests/preview_modern.py --case narrow-tall-30x40 --ansi
+PYTHONPATH=tests .venv/bin/python tests/preview_modern.py --case tiny-40x12
+PYTHONPATH=tests .venv/bin/python tests/preview_modern.py --case no-color --ansi
+PYTHONPATH=tests .venv/bin/python tests/preview_modern.py --case plugin-narrow
 PYTHONPATH=tests .venv/bin/python tests/preview_modern.py --case large-140x40 --ansi
 PYTHONPATH=tests .venv/bin/python tests/preview_modern.py --case partial-contributions --ansi
 PYTHONPATH=tests .venv/bin/python tests/preview_modern.py --case unicode-biography
@@ -207,7 +239,7 @@ gitfetch --presentation modern --theme nord
 gitfetch --presentation modern --details
 ```
 
-Resize to 40×12, 60×20, 80×24, 100×30, 140×40 and 200×15, or set
+Resize to 30×40, 40×12, 60×20, 80×24, 100×30, 140×40 and 200×15, or set
 `COLUMNS=60 LINES=20` explicitly for a controlled modern capture. Existing
 provider authentication/module configuration continues to determine available
 data; these commands do not turn on optional authenticated modules.
@@ -226,7 +258,7 @@ remain text. Statistics not represented structurally cannot be recovered by
 parsing legacy prose; the original classic view remains available. No provider
 semantics, API costs, sample caps or cache keys changed.
 
-## Verification record
+## Tranche 04 verification record
 
 Started on `main`, HEAD `caec20fae8d43e8b0633a12294c4403c28e253b2`.
 Incoming changes were `gitfetch/presentation.py`, `tests/test_presentation.py`

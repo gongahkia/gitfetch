@@ -13,6 +13,8 @@ from types import MappingProxyType
 from typing import Literal
 from urllib.parse import urlsplit
 
+from wcwidth import iter_graphemes
+
 from gitfetch.presentation import (
     ContributionActivity,
     LanguageDistribution,
@@ -24,10 +26,12 @@ from gitfetch.presentation import (
     RepositoryList,
 )
 from gitfetch.semantics import Measurement
-from gitfetch.terminal_text import cell_width, clip_text, sanitize_text, wrap_text
+from gitfetch.terminal_text import cell_width, clip_text, sanitize_text
 
-Role = Literal["identity", "heading", "text", "muted", "accent", "stat", "notice"]
+Role = Literal["identity", "heading", "text", "muted", "track", "accent", "stat", "notice"]
 Composition = Literal["split", "stack", "text"]
+# Standalone/help-quoted flags, not double hyphens inside URL paths or queries.
+_FLAG = re.compile(r"(?<![^\s(\[{'\"`])--[A-Za-z][A-Za-z0-9-]*")
 
 
 @dataclass(frozen=True)
@@ -119,7 +123,7 @@ def _wrap(text: str, width: int, role: Role = "text") -> list[Row]:
         if not pending and token.isspace():
             continue
         if cells > width:
-            chunks = wrap_text(token, width)
+            chunks = [row.text for row in _literal(token, width)]
             rows.extend(_line(chunk, role) for chunk in chunks[:-1])
             pending = chunks[-1] if chunks else ""
             used = cell_width(pending)
@@ -132,8 +136,48 @@ def _wrap(text: str, width: int, role: Role = "text") -> list[Row]:
 
 
 def _literal(text: str, width: int) -> list[Row]:
-    """Preserve indentation/empty lines in generic module and plugin output."""
-    return [_line(line) for line in (wrap_text(text, width) or [""])]
+    """Preserve literal whitespace and graphemes, keeping CLI flags atomic."""
+    safe = sanitize_text(text)
+
+    def units():
+        start = 0
+        for match in _FLAG.finditer(safe):
+            yield from iter_graphemes(safe[start:match.start()])
+            yield match.group()
+            start = match.end()
+        yield from iter_graphemes(safe[start:])
+
+    rows = []
+    parts: list[str] = []
+    used = 0
+    for unit in units():
+        cells = cell_width(unit)
+        if cells > width:
+            unit = "…" if _FLAG.fullmatch(unit) else "?"
+            cells = 1
+        if parts and used + cells > width:
+            rows.append(_line("".join(parts)))
+            parts, used = [], 0
+        parts.append(unit)
+        used += cells
+    if parts or not rows:
+        rows.append(_line("".join(parts)))
+    return rows
+
+
+def _clip(text: str, width: int) -> str:
+    """Clip without publishing a fragment of an actionable flag."""
+    safe = sanitize_text(text)
+    if cell_width(safe) <= width:
+        return safe
+    if width < 1:
+        return ""
+    prefix = clip_text(safe, width - 1, ellipsis="")
+    for match in _FLAG.finditer(safe):
+        if match.start() < len(prefix) < match.end():
+            prefix = safe[:match.start()]
+            break
+    return prefix + "…"
 
 
 def _bounded(text: str, width: int, rows: int) -> tuple[str, bool]:
@@ -142,7 +186,7 @@ def _bounded(text: str, width: int, rows: int) -> tuple[str, bool]:
     budget = max(1, width * rows)
     if cell_width(safe) <= budget:
         return safe, False
-    return clip_text(safe, budget), True
+    return _clip(safe, budget), True
 
 
 def _pack(values: list[str], width: int, role: Role = "text") -> list[Row]:
@@ -177,15 +221,18 @@ def _shift(day: date, offset: int) -> date:
     return date.fromordinal(min(date.max.toordinal(), max(1, day.toordinal() + offset)))
 
 
-def _coverage(measurement: Measurement) -> str:
+def _coverage(measurement: Measurement, *, compact: bool = False) -> str:
     parts = []
-    if measurement.coverage != "complete":
-        parts.append(f"{measurement.coverage} coverage")
+    selected = not measurement.complete_profile
     if measurement.sample_size is not None:
         count = str(measurement.sample_size)
         if measurement.eligible_repositories is not None:
             count += f"/{measurement.eligible_repositories}"
-        parts.append(f"{count} repos scanned")
+        parts.append(f"{count} selected repos" if compact and selected else f"{count} repos scanned")
+    if selected and not (compact and measurement.sample_size is not None):
+        parts.append("selected repos" if measurement.sample_size is not None else "profile coverage unknown")
+    if measurement.coverage != "complete" and not (selected and measurement.sample_size is None and measurement.coverage == "unknown"):
+        parts.append(measurement.coverage)
     if measurement.failed:
         parts.append(f"{measurement.failed} failed")
     if measurement.missing:
@@ -233,7 +280,7 @@ def _identity(content: ProfileIdentity, width: int, rows: int, details: bool) ->
         biography = _wrap(bio, width)
         if not details and len(biography) > limit:
             biography = biography[:limit]
-            biography[-1] = _line(clip_text(biography[-1].text, max(0, width - 1), ellipsis="") + "…")
+            biography[-1] = _line(_clip(biography[-1].text.rstrip("… ") + " …", width))
             condensed = True
         result.extend(biography)
     metadata = []
@@ -250,9 +297,10 @@ def _identity(content: ProfileIdentity, width: int, rows: int, details: bool) ->
     return result, condensed
 
 
-def _metrics(section: PresentationSection, content: MetricGroup, width: int, reference: date) -> list[Row]:
+def _metrics(section: PresentationSection, content: MetricGroup, width: int, reference: date) -> tuple[list[Row], int]:
     labels = {"public_repos": "public repos", "public_gists": "gists", "followers": "followers", "following": "following"}
-    values = []
+    values: list[str] = []
+    secondary: list[str] = []
     for metric in content.metrics:
         label = labels.get(metric.identifier, metric.label.lower())
         if metric.identifier == "public_repos" and metric.measurement.scope not in {"public owned repositories", "public_repos", ""}:
@@ -262,19 +310,23 @@ def _metrics(section: PresentationSection, content: MetricGroup, width: int, ref
             unit = f" {metric.measurement.unit}"
         if section.name == "stats" and metric.identifier not in labels and metric.measurement.scope:
             label += f" ({metric.measurement.scope})"
-        values.append(f"{_value(metric.measurement)}{unit} {label}")
+        target = secondary if section.name == "stats" and metric.identifier not in {"public_repos", "followers"} else values
+        target.append(f"{_value(metric.measurement)}{unit} {label}")
     result = _pack(values, width, "stat")
+    primary_rows = len(result)
     if section.name == "stats" and type(section.raw_data) in (dict, MappingProxyType):
         user = section.raw_data.get("user")
         if type(user) in (dict, MappingProxyType):
             age = _age(user.get("created_at"), reference)
             if age:
-                result.extend(_wrap(age, width, "muted"))
+                secondary.append(age)
+    result.extend(_pack(secondary, width, "muted"))
     if section.name == "streaks":
         measurement = section.measurements.get("contributions")
         if measurement:
-            result.extend(_wrap(f"Observed window: {_window(measurement)}", width, "muted"))
-    return result
+            coverage = f" · {measurement.coverage} coverage" if measurement.coverage != "complete" else ""
+            result.extend(_wrap(f"Observed window: {_window(measurement)}{coverage}", width, "muted"))
+    return result, max(1, primary_rows)
 
 
 def _languages(content: LanguageDistribution, width: int, height: int, details: bool) -> tuple[list[Row], bool]:
@@ -282,29 +334,24 @@ def _languages(content: LanguageDistribution, width: int, height: int, details: 
     if measurement.availability != "available":
         return _wrap(f"Languages: {_value(measurement)}", width, "notice"), False
     entries = content.selected
-    limit = 3 if height <= 24 else 5 if height <= 30 else len(entries)
+    limit = 2 if height <= 15 else 3 if height <= 24 else 5 if height <= 30 else len(entries)
     shown = entries if details else entries[:limit]
     # A user's module limit still selects entries. Full totals only establish the
     # denominator, never implicitly override that selection or become a top-N sum.
     header = "Languages · bytes" if measurement.unit == "bytes" else (
         "Languages · repository prevalence" if "prevalence" in measurement.scope else
         "Languages · primary-language repos" if measurement.unit == "repositories" else f"Languages · {measurement.unit}")
-    if not measurement.complete_profile:
-        header += " · selected repos"
-    if measurement.coverage != "complete":
-        header += f" · {measurement.coverage}"
-    if height <= 20 and not details:
-        header = "Languages · " + ("bytes" if measurement.unit == "bytes" else "repo prevalence" if "prevalence" in measurement.scope else measurement.unit)
-        if not measurement.complete_profile:
-            header += " · sample"
-        if measurement.coverage != "complete":
-            header += f" · {measurement.coverage}"
+    compact = width < 52 or (height <= 20 and not details)
+    if compact and measurement.unit == "repositories":
+        header = "Language prevalence · repos" if "prevalence" in measurement.scope else "Primary languages · repos"
     result = _wrap(header, width, "heading")
+    scope = _coverage(measurement, compact=compact)
+    if scope:
+        result.extend(_wrap(scope, width, "muted"))
     denominator = measurement.denominator
     fractions = denominator is not None and denominator > 0 and measurement.unit in {"bytes", "repositories"}
     name_width = min(18, max(5, width // 3), max((cell_width(e.language) for e in shown), default=5))
-    compact_values = []
-    clipped_name = False
+    suffixes = []
     for entry in shown:
         value = f"{entry.value:g}"
         if measurement.unit == "bytes" and fractions:
@@ -313,43 +360,53 @@ def _languages(content: LanguageDistribution, width: int, height: int, details: 
             suffix = f"{value}/{denominator:g} repos" if fractions else f"{value} repos"
         else:
             suffix = f"{value} {measurement.unit}"
-        if height <= 20 and not details:
+        suffixes.append(suffix)
+    suffix_width = max((cell_width(suffix) for suffix in suffixes), default=0)
+    bar_width = min(16, max(8, width // 4), width - name_width - suffix_width - 4)
+    compact_values = []
+    clipped_name = False
+    for entry, suffix in zip(shown, suffixes):
+        if height <= 20 and not details and width >= 40:
             compact_values.append(f"{entry.language} {suffix}")
             continue
-        bar_width = min(22, width - name_width - cell_width(suffix) - 4)
-        if fractions and bar_width >= 4:
+        if not compact and fractions and bar_width >= 8:
             ratio = min(1.0, max(0.0, entry.value / denominator))  # type: ignore[operator]
             filled = round(ratio * bar_width)
-            label = clip_text(entry.language, name_width)
+            label = _clip(entry.language, name_width)
             if cell_width(entry.language) > name_width:
                 if details:
                     result.extend(_wrap(entry.language, width))
                 else:
                     clipped_name = True
             pad = " " * (name_width - cell_width(label))
-            result.append(Row((Span(label + pad + "  "), Span("█" * filled, "accent"),
-                               Span("░" * (bar_width - filled), "muted"), Span("  " + suffix))))
+            empty = bar_width - filled
+            track = ("· " * ((empty + 1) // 2))[:empty]
+            result.append(Row((Span(label + pad + "  "), Span("━" * filled, "accent"),
+                               Span(track, "track"), Span("  " + " " * (suffix_width - cell_width(suffix)) + suffix))))
         else:
-            result.extend(_wrap(f"{entry.language}  {suffix}", width))
+            if cell_width(entry.language) <= name_width and name_width + cell_width(suffix) + 2 <= width:
+                result.append(_line(entry.language + " " * (name_width - cell_width(entry.language) + 2) + suffix))
+            else:
+                result.extend(_wrap(f"{entry.language}  {suffix}", width))
     result.extend(_pack(compact_values, width))
     if not entries:
         result.extend(_wrap("No language measurements returned", width, "muted"))
-    scope = _coverage(measurement)
-    if not measurement.complete_profile:
-        scope = "selected repos" + (f" · {scope}" if scope else " · profile completeness unknown")
-    if scope and (height > 20 or details):
-        result.extend(_wrap(scope, width, "muted"))
     if details and measurement.reason:
         result.extend(_wrap(measurement.reason, width, "notice"))
-    return result, clipped_name or len(shown) < len(entries) or (height <= 20 and not details and bool(scope))
+    return result, clipped_name or len(shown) < len(entries)
 
 
 def _contributions(content: ContributionActivity, width: int, height: int, details: bool) -> tuple[list[Row], bool]:
     observations = content.calendar_days if details else content.days
     measurement = content.calendar_measurement if details else content.measurement
     amount = f"{_value(measurement)} " if measurement.availability == "available" and measurement.value is not None else ""
-    summary = height <= 15 and not details
-    result = _wrap(f"Activity · {amount if summary else ''}{measurement.unit} · {measurement.coverage} coverage", width, "heading")
+    summary = (height <= 15 or width < 40) and not details
+    heading = f"Activity · {amount if summary else ''}{measurement.unit}"
+    if width >= 52:
+        result = _wrap(heading + f" · {measurement.coverage} coverage", width, "heading")
+    else:
+        result = _wrap(heading, width, "heading")
+        result.extend(_wrap(f"{measurement.coverage} coverage", width, "muted"))
     if measurement.availability != "available":
         result.extend(_wrap(_value(measurement), width, "notice"))
         return result, False
@@ -399,7 +456,7 @@ def _contributions(content: ContributionActivity, width: int, height: int, detai
                 result.extend(_wrap(f"Unknown dates: {start} – {_shift(next_start, -1)}", width, "notice"))
                 start = next_start
     else:
-        count = max(1, width)
+        count = max(1, min(32, width * 2 // 3))
         start = max(first, _shift(last, -(count - 1)))
         condensed |= not details and start > first
         result.extend(_wrap(f"Shown: {first if details else start} – {last}", width, "muted"))
@@ -431,14 +488,14 @@ def _section(section: PresentationSection, width: int, height: int, details: boo
         rows, condensed = _identity(content, width, height, details)
         priority, minimum = 0, 2
     elif isinstance(content, MetricGroup):
-        rows = _metrics(section, content, width, reference)
+        rows, primary_rows = _metrics(section, content, width, reference)
         if section.name == "stats":
-            priority, minimum = 1, 1
+            priority, minimum = 1, primary_rows
         else:
             rows = _wrap(section.title, width, "heading") + rows
     elif isinstance(content, LanguageDistribution):
         rows, condensed = _languages(content, width, height, details)
-        priority, minimum = 2, 2
+        priority, minimum = 2, min(3, len(rows))
     elif isinstance(content, ContributionActivity):
         rows, condensed = _contributions(content, width, height, details)
         if not details:
@@ -450,7 +507,11 @@ def _section(section: PresentationSection, width: int, height: int, details: boo
         for repo in content.repositories[:limit]:
             stars = next((metric.measurement for metric in repo.metrics if metric.identifier == "stars"), Measurement(availability="unavailable"))
             suffix = f"{_value(stars)} stars" + (f" · {repo.language}" if repo.language else "")
-            rows.extend(_wrap(f"{repo.name}  {suffix}", width))
+            if width < 52 and cell_width(f"{repo.name}  {suffix}") > width:
+                rows.extend(_wrap(repo.name, width))
+                rows.extend(_wrap(suffix, width, "muted"))
+            else:
+                rows.extend(_wrap(f"{repo.name}  {suffix}", width))
             if repo.description and (details or height >= 36):
                 rows.extend(_wrap(repo.description, width, "muted"))
             if details and repo.url:
@@ -462,7 +523,7 @@ def _section(section: PresentationSection, width: int, height: int, details: boo
             rows.extend(_wrap("Other pinned content (module text)", width, "muted"))
             for line in section.lines:
                 rows.extend(_literal(line, width))
-        if content.measurement.scope:
+        if content.measurement.scope and content.measurement.scope != "pinned repositories":
             rows.extend(_wrap(content.measurement.scope, width, "muted"))
     elif isinstance(content, RecentActivity):
         rows = _wrap(section.title + " · " + content.measurement.scope, width, "heading")
@@ -491,7 +552,11 @@ def _section(section: PresentationSection, width: int, height: int, details: boo
         for measurement in section.measurements.values():
             if measurement.availability != "available" and content is not None:
                 notices.append(measurement.reason or _value(measurement))
-            if measurement.coverage != "complete" and measurement.start and measurement.end:
+            streak_window = section.measurements.get("contributions") if section.name == "streaks" else None
+            already_shown = streak_window is not None and (
+                measurement.start, measurement.end, measurement.coverage) == (
+                streak_window.start, streak_window.end, streak_window.coverage)
+            if measurement.coverage != "complete" and measurement.start and measurement.end and not already_shown:
                 notices.append(f"{_window(measurement)} · {measurement.coverage} coverage")
         for notice in dict.fromkeys(notices):
             rows.extend(_wrap(notice, width, "notice"))
@@ -506,13 +571,19 @@ def _fit(sections: list[_Section], width: int, budget: int, details: bool) -> tu
     sizes = [len(section.rows) for section in sections]
     if not details:
         condensed |= sum(sizes) > budget
-    message = "More enabled content: --details" if width >= 30 else "More: --details" if width >= 15 else "--details"
-    footer = _line(clip_text(message, width), "notice")
+    message = next(text for text in ("More enabled content: --details", "Run --details", "--details", "…")
+                   if cell_width(text) <= width)
+    footer = _line(message, "notice")
     reserve = 1 if condensed and not details else 0
     # Spacing is the first thing to give up. Then shorten lower-priority sections,
     # retaining the caller's order rather than sorting the visible sections.
     spacing = max(0, len(sections) - 1) if details else min(
         max(0, len(sections) - 1), max(0, budget - sum(sizes) - reserve))
+    if condensed and not details and budget >= 18:
+        preferred_count = sum(index > 0 and section.name in {"languages", "contributions"}
+                        for index, section in enumerate(sections))
+        room = max(0, budget - reserve - sum(min(len(s.rows), s.minimum) for s in sections))
+        spacing = max(spacing, min(preferred_count, room))
     if not details:
         excess = max(0, sum(sizes) + spacing + reserve - budget)
         order = sorted(range(len(sections)), key=lambda i: (sections[i].priority, i), reverse=True)
@@ -537,16 +608,19 @@ def _fit(sections: list[_Section], width: int, budget: int, details: bool) -> tu
                     break
             if not excess:
                 break
+        spacing = min(max(0, sum(size > 0 for size in sizes) - 1), max(0, budget - sum(sizes) - reserve))
     rows: list[Row] = []
     omitted = []
-    for section, size in zip(sections, sizes):
+    boundaries = [index for index, size in enumerate(sizes) if size][1:]
+    preferred = [index for index in boundaries if sections[index].name in {"languages", "contributions"}]
+    gaps = set((preferred + [index for index in boundaries if index not in preferred])[:spacing])
+    for index, (section, size) in enumerate(zip(sections, sizes)):
         if not size:
             if section.rows:
                 omitted.append(section.name)
             continue
-        if rows and spacing:
+        if index in gaps:
             rows.append(_line(""))
-            spacing -= 1
         rows.extend(section.rows[:size])
     if reserve:
         rows.append(footer)

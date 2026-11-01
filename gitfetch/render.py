@@ -165,7 +165,9 @@ def _render_modern(config: dict[str, Any], document: ProfileDocument, output_for
     plan = plan_profile(document, viewport, preferences, geometry, reference_date=reference)
     enabled = color_enabled(config, output_format)
     palette = palette_for(config)
-    roles = {"identity": "title", "heading": "key", "text": "value", "muted": "dim",
+    # Descriptive text follows the user's foreground instead of a low-contrast
+    # dark theme gray. Only decorative rail dots use the dim palette role.
+    roles = {"identity": "title", "heading": "key", "text": "value", "muted": "value", "track": "dim",
              "accent": "accent", "stat": "title", "notice": "accent"}
     text_lines = []
     for row in plan.rows:

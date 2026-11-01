@@ -3,26 +3,26 @@
 &&&#SSSSSSSSSSSS#SSSSSS#&&&   Building thoughtful developer tools and small, useful things for the
 &&#SSSSSSSS#&@@#SSSSSSSS#&&   open web.
 &&#SSSSS#@@%!!!*@@#SSSSS#&&   Singapore   Open Source Collective   alex.example
-&&#SSSSS#!:!!!!!:!#SSSSS#&&   42 public repos   1,280 followers   87 following   0 gists
-@@#SSSSSS&*!!!!!*&SSSSSS#@@   7 years on platform
-@@#SSSSSSS#@$$$@#SSSSSSS#@@   Languages · bytes · selected repos · partial
-@@#SSSS#@$%%%%%%%$@#SSSS#@@   Python      ████████████████░░░░░░  73.0%
-@@#SSS&*************&SSS#@@   TypeScript  ████░░░░░░░░░░░░░░░░░░  16.0%
-@@#SSS%*************%SSS#@@   Go          █░░░░░░░░░░░░░░░░░░░░░  6.0%
-$$@#SS@*************@SS#@$$   Rust        █░░░░░░░░░░░░░░░░░░░░░  3.0%
-$$$$@&#@***********@#&@$$$$   Shell       ░░░░░░░░░░░░░░░░░░░░░░  1.0%
-$$$$$$$$$$%%%%%%%$$$$$$$$$$   selected repos · partial coverage · 20/42 repos scanned
+&&#SSSSS#!:!!!!!:!#SSSSS#&&   42 public repos   1,280 followers
+@@#SSSSSS&*!!!!!*&SSSSSS#@@   87 following   0 gists   7 years on platform
+@@#SSSSSSS#@$$$@#SSSSSSS#@@
+@@#SSSS#@$%%%%%%%$@#SSSS#@@   Languages · bytes
+@@#SSS&*************&SSS#@@   20/42 repos scanned · selected repos · partial
+@@#SSS%*************%SSS#@@   Python      ━━━━━━━━━━━━· ·   73.0%
+$$@#SS@*************@SS#@$$   TypeScript  ━━━· · · · · · ·  16.0%
+$$$$@&#@***********@#&@$$$$   Go          ━· · · · · · · ·   6.0%
+$$$$$$$$$$%%%%%%%$$$$$$$$$$   Rust        · · · · · · · ·    3.0%
+                              Shell       · · · · · · · ·    1.0%
+
                               Activity · contributions · unknown coverage
-                              Shown: 2025-11-20 – 2026-01-28
-                              ▅▁▆▂?▂▇▃█▄·▄·?▁▆·▆▂▇▃█?█▄·▅▁·▂▆?▇▃·▄█▄·▅?▆▂▆▂▇·█▄?▄··▁▆▂▆▂?▃█▄█▄·▅▁?▂▆
+                              Shown: 2025-12-28 – 2026-01-28
+                              ·▅?▆▂▆▂▇·█▄?▄··▁▆▂▆▂?▃█▄█▄·▅▁?▂▆
                               · zero  ? unknown  ▁–█ 1–12
                               376 in window · 2025-11-06 – 2026-01-28
                               Streaks
                               3 days current observed streak   18 days longest observed streak
                               376 contributions window total
-                              Observed window: 2025-11-06 – 2026-01-28
-                              2025-11-06 – 2026-01-28 · unknown coverage
+                              Observed window: 2025-11-06 – 2026-01-28 · unknown coverage
                               Pinned
                               alex-dev/gitfetch  284 stars · Python
-                              alex-dev/tiny-tools  0 stars · Go
                               More enabled content: --details
