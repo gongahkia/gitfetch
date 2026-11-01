@@ -353,7 +353,8 @@ def handle_repo_command(args: argparse.Namespace) -> int:
         raise ConfigError("repo target must be OWNER/NAME")
     owner, name = args.target.split("/", 1)
     config = _load_config_with_path(args)
-    client = _client_for(args, config)
+    render_config = {**config}
+    client = _client_for(args, render_config)
     try:
         repo = client.get_repo(owner, name)
         languages = client.get_repo_languages(owner, name)
@@ -415,7 +416,7 @@ def handle_repo_command(args: argparse.Namespace) -> int:
 
     avatar_url = (repo.get("owner") or {}).get("avatar_url")
     _emit_mode_output(
-        config,
+        render_config,
         args,
         kind="repository",
         title=repo.get("full_name") or args.target,
@@ -429,7 +430,8 @@ def handle_repo_command(args: argparse.Namespace) -> int:
 
 def handle_org_command(args: argparse.Namespace) -> int:
     config = _load_config_with_path(args)
-    client = _client_for(args, config)
+    render_config = {**config}
+    client = _client_for(args, render_config)
     try:
         org = client.get_org(args.target)
         members = client.get_org_members(args.target, limit=args.members_limit)
@@ -487,7 +489,7 @@ def handle_org_command(args: argparse.Namespace) -> int:
         modules.append(ModuleResult("members", "Members", member_lines, members))
 
     _emit_mode_output(
-        config,
+        render_config,
         args,
         kind="organization",
         title=org.get("name") or org.get("login") or args.target,
@@ -503,7 +505,8 @@ def handle_compare_command(args: argparse.Namespace) -> int:
     if len(args.users) < 2:
         raise ConfigError("compare needs at least two users")
     config = _load_config_with_path(args)
-    client = _client_for(args, config)
+    render_config = {**config}
+    client = _client_for(args, render_config)
     output_format = args.format or config["display"].get("format", "ansi")
     enabled_color = color_enabled(config, output_format)
     palette = palette_for(config)
@@ -561,7 +564,7 @@ def handle_compare_command(args: argparse.Namespace) -> int:
         text = module_lines(visible, enabled_color, palette)
         columns.append(text)
         if config["display"].get("avatar") and output_format in {"ansi", "plain"}:
-            with avatar_context(config["_avatar_loader"]):
+            with avatar_context(render_config.get("_avatar_loader")):
                 avatar = render_avatar(
                     ctx.user.get("avatar_url"), width=column_width,
                     style=config["display"].get("avatar_style", "ascii"), color_mode=avatar_color,
@@ -606,7 +609,7 @@ def handle_compare_command(args: argparse.Namespace) -> int:
                 )
             )
         _emit_mode_output(
-            config,
+            render_config,
             args,
             kind="compare",
             title=f"{client.provider_title} Compare",

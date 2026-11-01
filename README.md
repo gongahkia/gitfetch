@@ -82,6 +82,8 @@ $ gitfetch --no-avatar # stats only, no ASCII art
 $ gitfetch --presentation modern # responsive terminal profile, also available in captured/plain output
 $ gitfetch --presentation classic # preserve the previous terminal style
 $ gitfetch --details # expand enabled modern sections; may scroll, collects no additional data
+$ gitfetch --offline # cached provider data and avatars only; missing avatars are omitted
+$ gitfetch --refresh # bypass response and avatar cache reads
 $ gitfetch --token ghp_xxxx # authenticated; also accepts provider env variables such as GITHUB_TOKEN, GITLAB_TOKEN, BITBUCKET_TOKEN, GITEA_TOKEN, FORGEJO_TOKEN, or CODEBERG_TOKEN
 ```
 

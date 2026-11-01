@@ -12,6 +12,7 @@ import test_contracts as contracts
 from avatar_fixtures import CASES, image_bytes
 from modern_fixtures import fixture
 from PIL import Image
+from preview_avatars import ROOT, preview
 from test_avatar_assets import URL, response
 
 from gitfetch.config import SUPPORTED_PROVIDERS, preset_config, write_config
@@ -46,6 +47,14 @@ class AvatarEncoderTests(unittest.TestCase):
                             self.assertTrue(all(line.endswith("\x1b[0m") for line in lines))
                         if color == "256":
                             self.assertNotIn(";2;", "".join(lines))
+
+    def test_reviewable_avatar_previews_and_source_fixtures(self):
+        for case in CASES:
+            with self.subTest(case=case):
+                self.assertEqual(preview(case), (ROOT / f"{case}.txt").read_text(encoding="utf-8"))
+                extension = "jpg" if case == "oriented" else "gif" if case == "animated" else "png"
+                source = prepare_avatar((ROOT / f"{case}.{extension}").read_bytes())
+                self.assertEqual(source.image.tobytes(), prepare_avatar(image_bytes(case)).image.tobytes())
 
     def test_transparent_pixels_are_spaces_and_never_have_background_colors(self):
         image = Image.new("RGBA", (16, 16), (255, 0, 255, 0))
@@ -366,3 +375,18 @@ class AvatarPipelineTests(contracts._ContractFixtures):
             self.run_cli([], self.avatar_client(), "card")
         output = self.run_cli(["--offline", "--no-color", "--presentation", "modern"], self.avatar_client(), "ansi")
         self.assertNotRegex(output, re.compile(r"[\x00-\x08\x0b-\x1f\x7f]"))
+
+    def test_internal_loader_is_absent_from_plugin_configuration(self):
+        from gitfetch.modules import load_plugin_modules
+        path = Path(self.directory) / "asset_plugin.py"
+        path.write_text("def check(config, context, client):\n"
+                        "    assert '_avatar_loader' not in config\n"
+                        "    return ['asset policy stays outside plugin config']\n"
+                        "MODULES = {'asset_check': check}\n")
+        self.config["plugins"] = {"paths": [str(path)], "modules": ["asset_check"], "allow_unsafe": True}
+        write_config(self.path, self.config)
+        self.addCleanup(load_plugin_modules, {"plugins": {}})
+        for mode in ([], ["compare", "alice", "bob"]):
+            result = self.run_cli(["--offline", *mode], self.avatar_client())
+            payload = result["modules"] if not mode else result["modules"]["alice"]
+            self.assertEqual(payload["asset_check"], ["asset policy stays outside plugin config"])

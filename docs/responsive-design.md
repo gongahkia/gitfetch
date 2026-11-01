@@ -256,9 +256,9 @@ Unicode ambiguous width uses wcwidth's narrow policy; terminal emoji/font choice
 can differ. Very small widths necessarily lose labels in normal mode; details
 keeps all content wrapped, with oversized graphemes using the foundation's `?`
 fallback. Detailed calendars group wide unknown gaps into explicit dated unknown
-intervals rather than materializing years of absent cells. Avatar asset
-download/cache/offline limitations and export design
-remain separate tranches. Generic plugin payloads without structured adapters
+intervals rather than materializing years of absent cells. Avatar acquisition,
+cache/offline policy and alpha handling are documented in [avatar-assets.md](avatar-assets.md).
+Native terminal graphics and export design remain separate tranches. Generic plugin payloads without structured adapters
 remain text. Statistics not represented structurally cannot be recovered by
 parsing legacy prose; the original classic view remains available. No provider
 semantics, API costs, sample caps or cache keys changed.
