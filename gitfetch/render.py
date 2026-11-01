@@ -13,7 +13,7 @@ from typing import Any
 from PIL import Image
 from wcwidth import iter_graphemes
 
-from gitfetch.images import avatar_render, fetch_avatar_image
+from gitfetch.images import avatar_render, fetch_avatar_image, fit_avatar_image
 from gitfetch.modules.builtin import ModuleResult
 from gitfetch.presentation import PresentationSection, ProfileDocument, build_profile_document
 from gitfetch.terminal_text import cell_width, sanitize_text
@@ -191,6 +191,8 @@ def _render_modern(config: dict[str, Any], document: ProfileDocument, output_for
     # Tiny/text-only output need not download an avatar. Source geometry and the
     # semantic document are measured once; only the final allocation is encoded.
     image = _load_avatar(document.avatar_reference) if avatar_may_fit(viewport, preferences) and document.avatar_reference else None
+    if image is not None:
+        image = fit_avatar_image(image, display.get("avatar_fit", "auto"))
     geometry = AvatarGeometry(*image.size) if image is not None else None
     plan = plan_profile(document, viewport, preferences, geometry, reference_date=reference)
     text_lines = _paint_modern_rows(config, plan.rows, output_format)

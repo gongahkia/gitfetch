@@ -12,7 +12,7 @@ from collections import OrderedDict
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import wraps
 from http.client import HTTPException
 from io import BytesIO
@@ -68,12 +68,34 @@ class PreparedAvatar:
     def effective_size(self) -> tuple[int, int]:
         return self.image.size
 
+    def for_presentation(self, fit: str = "original") -> PreparedAvatar:
+        """Modern-only alpha fit; retain the source and every nonzero alpha.
+
+        Modern callers pass auto (visible); original preserves intentional
+        whitespace. Cropping uses decoded pixels, never another load.
+        """
+        image = fit_avatar_image(self.image, fit)
+        return self if image is self.image else replace(self, image=image)
+
     def fit(self, bounds: tuple[int, int]) -> Image.Image:
         """Bounded RGBA copy, retaining aspect ratio, for future backends too."""
         image = self.image.copy()
         image.thumbnail((max(1, min(bounds[0], PREPARED_AVATAR_EDGE)),
                          max(1, min(bounds[1], PREPARED_AVATAR_EDGE))), Image.Resampling.LANCZOS)
         return image
+
+
+def fit_avatar_image(image: Image.Image, fit: str = "original") -> Image.Image:
+    """Modern auto/visible fit removes only fully transparent exterior pixels.
+
+    Classic and export callers retain the default original policy.
+    """
+    if fit not in {"auto", "visible"} or image.mode != "RGBA":
+        return image
+    bounds = image.getchannel("A").getbbox()
+    if bounds is None or bounds == (0, 0, *image.size):
+        return image
+    return image.crop(bounds)
 
 
 @dataclass(frozen=True)

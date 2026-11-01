@@ -67,6 +67,8 @@ def build_terminal_frame(config: dict[str, Any], document: ProfileDocument, deci
     asset = None
     if decision.backend != "none" and avatar_may_fit(viewport, preferences) and document.avatar_reference:
         asset = loader.load(document.avatar_reference).asset
+        if asset is not None:
+            asset = asset.for_presentation(display.get("avatar_fit", "auto"))
     plan = plan_profile(document, viewport, preferences, AvatarGeometry(*asset.effective_size) if asset else None,
                         reference_date=reference_date)
     text_lines = _paint_modern_rows(config, plan.rows, "ansi")

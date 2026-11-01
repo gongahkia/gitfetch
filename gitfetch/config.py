@@ -120,6 +120,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "format": "ansi",
         "avatar_style": "ascii",
         "avatar_renderer": "auto",
+        "avatar_fit": "auto",
         "avatar_color": "auto",
         "svg_font_family": "BigBlue Terminal 437, BigBlue Terminal Plus, monospace",
         "card_language_icons": True,
@@ -547,6 +548,8 @@ def normalize_config(config: dict[str, Any]) -> None:
     if config["display"].get("avatar_renderer", "auto") not in {"auto", "kitty", "text"}:
         raise ConfigError("display.avatar_renderer must be auto, kitty, or text")
     color_mode = config["display"].get("avatar_color", "auto")
+    if config["display"].get("avatar_fit", "auto") not in {"auto", "original", "visible"}:
+        raise ConfigError("display.avatar_fit must be auto, original, or visible")
     if color_mode not in {"auto", "none", "256", "truecolor"}:
         raise ConfigError(f"display.avatar_color '{color_mode}' must be auto, none, 256, or truecolor")
     languages_config = modules["languages"]

@@ -23,6 +23,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--case", choices=CASES, default="transparent")
     parser.add_argument("--layout", choices=("split", "stack"), default="split")
+    parser.add_argument("--fit", choices=("original", "visible"), default="original")
     parser.add_argument("--confirm-kitty", action="store_true", help="Confirm the current effective path supports Kitty graphics")
     parser.add_argument("--offline", choices=("cached", "missing"), default="cached", help="Exercise only an isolated temporary asset cache")
     args = parser.parse_args(argv)
@@ -34,7 +35,7 @@ def main(argv=None):
     print(f"Preview backend: {selected.backend} ({selected.reason})", file=sys.stderr)
     _, _, document = fixture()
     config = preset_config("minimal")
-    config["display"].update(avatar=True, presentation="modern", layout=args.layout)
+    config["display"].update(avatar=True, presentation="modern", layout=args.layout, avatar_fit=args.fit)
     if selected.color != "auto":
         config["display"]["avatar_color"] = selected.color
     if caps.no_color:
