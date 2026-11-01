@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import shutil
+from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
@@ -32,6 +33,15 @@ from gitfetch.render import (
     render_avatar,
     visible_len,
 )
+from gitfetch.semantics import (
+    Measurement,
+    RepositoryCoverage,
+    aggregate,
+    number,
+    profile_measurements,
+    repository_measurements,
+)
+from gitfetch.terminal_text import sanitize_text
 
 
 def _apply_common_overrides(args: argparse.Namespace, config: dict[str, Any]) -> None:
@@ -220,6 +230,8 @@ def _token_required_result(name: str, client=None) -> ModuleResult:
         [f"requires --token, {env_name}, or profile.token_command"],
         {"requires_token": True},
         requires_token=True,
+        measurements={name: Measurement(provider=getattr(client, "provider_name", "github"), availability="auth_required",
+                                        reason="module requires a token")},
     )
 
 
@@ -230,7 +242,14 @@ def _unsupported_provider_result(name: str, client) -> ModuleResult:
         name.replace("_", " ").title(),
         [f"unsupported on {client.provider_title}: {reason}"],
         {"unsupported": True, "provider": client.provider_name, "reason": reason},
+        measurements={name: Measurement(provider=client.provider_name, availability="unsupported", reason=reason)},
     )
+
+
+class _ComparedMetrics(dict[str, Any]):
+    """Keep ranking provenance outside the existing JSON metric fields."""
+
+    measurements: dict[str, Measurement]
 
 
 def _compare_metrics(ctx) -> dict[str, Any]:
@@ -239,35 +258,77 @@ def _compare_metrics(ctx) -> dict[str, Any]:
         language = repo.get("language")
         if language:
             languages[language] = languages.get(language, 0) + 1
-    return {
+    provider = getattr(ctx, "provider", "github")
+    measured = profile_measurements(ctx.user, provider)
+    supplied = getattr(ctx, "measurements", {})
+    if isinstance(supplied, dict):
+        measured.update({key: value for key, value in supplied.items()
+                         if key in measured and isinstance(value, Measurement)})
+    coverage = getattr(ctx, "repository_coverage", None)
+    scope = coverage.scope if isinstance(coverage, RepositoryCoverage) else "public owned repositories"
+    filters = coverage.filters if isinstance(coverage, RepositoryCoverage) else ()
+    def measured_value(key: str):
+        measurement = measured[key]
+        return number(measurement.value) if measurement.availability == "available" else None
+
+    result = _ComparedMetrics({
         "login": ctx.user.get("login"),
-        "followers": int(ctx.user.get("followers", 0) or 0),
-        "following": int(ctx.user.get("following", 0) or 0),
-        "public_repos": int(ctx.user.get("public_repos", len(ctx.repos)) or 0),
-        "stars": sum(int(repo.get("stargazers_count", 0) or 0) for repo in ctx.repos),
-        "forks": sum(int(repo.get("forks_count", 0) or 0) for repo in ctx.repos),
+        "followers": measured_value("followers"),
+        "following": measured_value("following"),
+        "public_repos": measured_value("public_repos"),
+        "stars": aggregate(ctx.repos, "stargazers_count"),
+        "forks": aggregate(ctx.repos, "forks_count"),
         "languages": languages,
-        "top_language": max(languages.items(), key=lambda item: item[1])[0] if languages else None,
-    }
+        "top_language": min(languages, key=lambda language: (-languages[language], language.casefold(), language)) if languages else None,
+    })
+    for key in ("stars", "forks"):
+        measured[key] = Measurement(result[key], provider, key, f"{scope}; selected; filters={filters}",
+                                    "available" if result[key] is not None else "unavailable", "repository responses", "complete" if result[key] is not None else "partial",
+                                    sample_size=len(ctx.repos))
+    result.measurements = measured
+    known_languages = sum(bool(repo.get("language")) for repo in ctx.repos)
+    measured["languages"] = Measurement(known_languages, provider, "repositories", "selected primary-language metadata",
+                                        coverage="complete" if known_languages == len(ctx.repos) else "partial",
+                                        sample_size=known_languages, denominator=len(ctx.repos))
+    return result
 
 
 def _rank_line(metrics: list[dict[str, Any]], key: str, label: str) -> str:
-    ranked = sorted(metrics, key=lambda item: item.get(key, 0), reverse=True)
-    values = " > ".join(f"{item['login']} {item.get(key, 0)}" for item in ranked)
-    return f"{label}: {values}"
+    ranked = [item for item in metrics if number(item.get(key)) is not None]
+    missing = sorted(str(item["login"]) for item in metrics if number(item.get(key)) is None)
+    scopes = set()
+    for item in ranked:
+        measurement = getattr(item, "measurements", {}).get(key)
+        if measurement:
+            scopes.add((measurement.provider, measurement.unit, measurement.scope))
+    if len(scopes) > 1:
+        return f"{label}: not comparable (different providers or measurement scopes)"
+    suffix = f"; unavailable: {', '.join(missing)}" if missing else ""
+    if len(ranked) < 2:
+        return f"{label}: insufficient comparable data{suffix}"
+    ranked.sort(key=lambda item: (-item[key], str(item["login"]).casefold(), str(item["login"])))
+    values = f"{ranked[0]['login']} {ranked[0][key]}"
+    for previous, item in pairwise(ranked):
+        values += (" = " if previous[key] == item[key] else " > ") + f"{item['login']} {item[key]}"
+    return f"{label}: {values}{suffix}"
 
 
 def _compare_summary_module(metrics: list[dict[str, Any]]) -> ModuleResult:
     language_sets = [set(item["languages"]) for item in metrics]
     overlap = sorted(set.intersection(*language_sets)) if language_sets and all(language_sets) else []
     top_languages = ", ".join(f"{item['login']} {item.get('top_language') or 'n/a'}" for item in metrics)
+    partial_languages = any(getattr(item, "measurements", {}).get("languages", Measurement()).coverage != "complete"
+                            for item in metrics)
+    overlap_text = ', '.join(overlap) if overlap else 'none'
+    if partial_languages:
+        overlap_text = f"{', '.join(overlap) if overlap else 'unavailable'} (primary-language metadata incomplete)"
     lines = [
         _rank_line(metrics, "followers", "followers"),
         _rank_line(metrics, "public_repos", "repos"),
-        _rank_line(metrics, "stars", "stars"),
-        _rank_line(metrics, "forks", "forks"),
-        f"language overlap: {', '.join(overlap) if overlap else 'none'}",
-        f"top languages: {top_languages}",
+        _rank_line(metrics, "stars", "stars (selected repos)"),
+        _rank_line(metrics, "forks", "forks (selected repos)"),
+        f"observed language overlap: {overlap_text}",
+        f"top primary languages (selected repos): {top_languages}",
     ]
     return ModuleResult(
         "summary",
@@ -292,7 +353,7 @@ def handle_repo_command(args: argparse.Namespace) -> int:
         contributors = client.get_repo_contributors(owner, name, limit=args.contributors_limit)
         commits = client.get_repo_commits(owner, name, limit=args.commits_limit)
     except GitHubAPIError as exc:
-        print(f"api error: {exc}")
+        print(sanitize_text(f"api error: {exc}"))
         return 1
 
     modules: list[ModuleResult] = []
@@ -307,26 +368,30 @@ def handle_repo_command(args: argparse.Namespace) -> int:
     modules.append(ModuleResult("identity", "Repository", identity_lines, repo))
 
     stats_lines = [
-        f"stars: {_metric_text(repo.get('stargazers_count', 0))}",
-        f"forks: {_metric_text(repo.get('forks_count', 0))}",
-        f"watchers: {_metric_text(repo.get('subscribers_count', repo.get('watchers_count', 0)))}",
-        f"open issues: {_metric_text(repo.get('open_issues_count', 0))}",
-        f"size: {_metric_text(repo.get('size', 0))} KB",
+        f"stars: {_metric_text(repo.get('stargazers_count'))}",
+        f"forks: {_metric_text(repo.get('forks_count'))}",
+        f"watchers: {_metric_text(repo.get('subscribers_count', repo.get('watchers_count')))}",
+        f"open issues: {_metric_text(repo.get('open_issues_count'))}",
+        f"size: {_metric_text(repo.get('size'))} {'bytes' if client.provider_name in {'gitlab', 'bitbucket'} else 'KB'}",
     ]
     if repo.get("pushed_at"):
         stats_lines.append(f"last push: {repo['pushed_at']}")
-    modules.append(ModuleResult("stats", "Stats", stats_lines, repo))
+    modules.append(ModuleResult("stats", "Stats", stats_lines, repo, measurements=repository_measurements(repo, client.provider_name)))
 
     total_bytes = sum(languages.values()) or 1
-    lang_lines = [
-        f"{language} {count * 100 // total_bytes}%"
-        for language, count in sorted(languages.items(), key=lambda kv: kv[1], reverse=True)[:5]
-    ]
+    unit = getattr(client, "language_breakdown_unit", "bytes")
+    ranked = sorted(languages.items(), key=lambda kv: (-kv[1], kv[0].casefold(), kv[0]))[:5]
+    if unit == "percent":
+        lang_lines = [f"{language} {count:g}% (project usage)" for language, count in ranked]
+    elif unit == "repositories":
+        lang_lines = [f"{language} (primary language)" for language, _ in ranked]
+    else:
+        lang_lines = [f"{language} {count * 100 // total_bytes}%" for language, count in ranked]
     if lang_lines:
         modules.append(ModuleResult("languages", "Languages", lang_lines, languages))
 
     contrib_lines = [
-        f"{c.get('login')} ({c.get('contributions', 0)} commits)"
+        f"{c.get('login')} ({_metric_text(c.get('contributions'))} commits{' in retrieved sample' if client.provider_name in {'gitea', 'forgejo', 'codeberg', 'bitbucket'} else ''})"
         for c in contributors
     ]
     if contrib_lines:
@@ -363,7 +428,7 @@ def handle_org_command(args: argparse.Namespace) -> int:
         members = client.get_org_members(args.target, limit=args.members_limit)
         repos = client.get_org_repos(args.target)
     except GitHubAPIError as exc:
-        print(f"api error: {exc}")
+        print(sanitize_text(f"api error: {exc}"))
         return 1
 
     identity_lines = [f"@{org.get('login')}"]
@@ -378,19 +443,26 @@ def handle_org_command(args: argparse.Namespace) -> int:
     if org.get("email"):
         identity_lines.append(f"email: {org['email']}")
 
-    public_repos = org.get("public_repos") or len(repos)
+    public_repos = org.get("public_repos")
     stats_lines = [
-        f"public repos: {public_repos}",
+        f"public repos: {_metric_text(public_repos)}",
         f"members shown: {len(members)}",
-        f"followers: {org.get('followers', 0)}",
+        f"followers: {_metric_text(org.get('followers'))}",
     ]
     if all(repo.get("stargazers_count") is not None for repo in repos):
         total_stars = sum(repo["stargazers_count"] for repo in repos)
-        stats_lines.insert(2, f"total stars: {total_stars}")
+        stats_lines.insert(2, f"stars in fetched repos: {total_stars}")
     else:
-        stats_lines.insert(2, "total stars: unavailable")
+        stats_lines.insert(2, "stars in fetched repos: unavailable")
+    if public_repos is None:
+        stats_lines.append(f"repos fetched: {len(repos)} (viewer-accessible)")
 
-    sorted_repos = sorted(repos, key=lambda r: r.get("stargazers_count") or 0, reverse=True)[:args.repos_limit]
+    measured_repos = [repo for repo in repos if number(repo.get("stargazers_count")) is not None]
+    sorted_repos = sorted(measured_repos, key=lambda r: (-r["stargazers_count"], str(r.get("name") or "")))[:args.repos_limit]
+    repo_title = "Top Repos"
+    if not measured_repos:
+        sorted_repos = sorted(repos, key=lambda r: str(r.get("name") or ""))[:args.repos_limit]
+        repo_title = "Repositories (Stars Unavailable)"
     repo_lines = [
         f"{r.get('name')} ({r.get('language') or 'n/a'}, "
         f"★{_metric_text(r.get('stargazers_count'))})"
@@ -400,10 +472,10 @@ def handle_org_command(args: argparse.Namespace) -> int:
 
     modules = [
         ModuleResult("identity", "Organization", identity_lines, org),
-        ModuleResult("stats", "Stats", stats_lines, org),
+        ModuleResult("stats", "Stats", stats_lines, org, measurements=profile_measurements(org, client.provider_name)),
     ]
     if repo_lines:
-        modules.append(ModuleResult("top_repos", "Top Repos", repo_lines, sorted_repos))
+        modules.append(ModuleResult("top_repos", repo_title, repo_lines, sorted_repos))
     if member_lines:
         modules.append(ModuleResult("members", "Members", member_lines, members))
 
@@ -457,7 +529,7 @@ def handle_compare_command(args: argparse.Namespace) -> int:
                 include_graphql=include_graphql,
             )
         except GitHubAPIError as exc:
-            print(f"api error for {user_login}: {exc}")
+            print(sanitize_text(f"api error for {user_login}: {exc}"))
             return 1
         contexts.append(ctx)
         modules: list[ModuleResult] = []
@@ -518,9 +590,9 @@ def handle_compare_command(args: argparse.Namespace) -> int:
                     metric["login"],
                     str(metric["login"]),
                     [
-                        f"followers: {metric['followers']}",
-                        f"repos: {metric['public_repos']}",
-                        f"stars: {metric['stars']}",
+                        f"followers: {_metric_text(metric['followers'])}",
+                        f"repos: {_metric_text(metric['public_repos'])}",
+                        f"stars: {_metric_text(metric['stars'])}",
                         f"top language: {metric.get('top_language') or 'n/a'}",
                     ],
                     metric,

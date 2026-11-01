@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import hashlib
 from collections import Counter
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from typing import Any, ClassVar
 from urllib.parse import quote
@@ -19,15 +20,36 @@ from gitfetch.github_api import (
     configure_http_retries,
     filter_repos,
 )
+from gitfetch.semantics import (
+    Availability,
+    HeatmapData,
+    LanguageData,
+    Measurement,
+    number,
+    profile_measurements,
+    repository_coverage,
+)
 
 
 class BaseProviderClient:
     provider_name = "provider"
+
     provider_title = "Provider"
     supported_modules: ClassVar[set[str]] = {"identity", "stats"}
     token_required_modules: ClassVar[set[str]] = set()
     language_breakdown_unit = "bytes"
     unsupported_reasons: ClassVar[dict[str, str]] = {}
+
+    def _language_data(self, path: str, cache_key: str, unit: str) -> LanguageData:
+        measurement = Measurement(provider=self.provider_name, unit=unit, scope="repository", source=path)
+        try:
+            payload = self._get_json(path, cache_key=cache_key)
+            if not isinstance(payload, dict):
+                raise TypeError("invalid language response")
+        except (GitHubAPIError, requests.RequestException, ValueError, TypeError) as exc:
+            status: Availability = "auth_required" if isinstance(exc, GitHubAPIError) and exc.status_code in {401, 403} else "unavailable"
+            return LanguageData({}, replace(measurement, availability=status, reason=str(exc)))
+        return LanguageData(payload, measurement)
 
     def __init__(self, token: str, cache: CacheStore, offline: bool, base_url: str) -> None:
         self.token = token
@@ -83,14 +105,14 @@ class BaseProviderClient:
         if response.status_code == 404:
             raise GitHubAPIError(f"{self.provider_title} user or resource not found")
         if response.status_code == 401:
-            raise GitHubAPIError(f"{self.provider_title} authentication failed")
+            raise GitHubAPIError(f"{self.provider_title} authentication failed", status_code=401)
         if response.status_code in {403, 429}:
             rate_limited = response.status_code == 429 or response.headers.get("X-RateLimit-Remaining") == "0"
             if rate_limited and stale is not None:
                 return stale
             if rate_limited:
                 raise GitHubAPIError(f"{self.provider_title} rate limited request: {self._message(response)}", rate_limited=True)
-            raise GitHubAPIError(f"{self.provider_title} rejected request: {self._message(response)}")
+            raise GitHubAPIError(f"{self.provider_title} rejected request: {self._message(response)}", status_code=response.status_code)
         if not response.ok:
             raise GitHubAPIError(f"{self.provider_title} API returned HTTP {response.status_code}")
         payload = response.json()
@@ -134,6 +156,7 @@ class BaseProviderClient:
 
 
 class GitLabClient(BaseProviderClient):
+    language_breakdown_unit = "percent"
     provider_name = "gitlab"
     provider_title = "GitLab"
     supported_modules: ClassVar[set[str]] = {
@@ -196,7 +219,7 @@ class GitLabClient(BaseProviderClient):
             if response.status_code == 404:
                 raise GitHubAPIError(f"{self.provider_title} user or resource not found")
             if response.status_code in {401, 403}:
-                raise GitHubAPIError(f"{self.provider_title} rejected request: {self._message(response)}")
+                raise GitHubAPIError(f"{self.provider_title} rejected request: {self._message(response)}", status_code=response.status_code)
             if not response.ok:
                 raise GitHubAPIError(f"{self.provider_title} API returned HTTP {response.status_code}")
             payload = response.json()
@@ -251,8 +274,14 @@ class GitLabClient(BaseProviderClient):
             if authenticated_login and authenticated_login.lower() == username.lower():
                 user = viewer
                 viewer_mode = True
-        repos = filter_repos(self.get_repos(username, viewer_mode=viewer_mode), repo_filters)
-        user["public_repos"] = sum(1 for repo in repos if not repo.get("private")) if viewer_mode else len(repos)
+        fetched = self.get_repos(username, viewer_mode=viewer_mode)
+        eligible = [repo for repo in fetched if viewer_mode or repo.get("private") is False]
+        if is_group:
+            namespace = str(user.get("full_path") or username).casefold()
+            eligible = [repo for repo in eligible if not (repo.get("owner") or {}).get("login")
+                        or str(repo["owner"]["login"]).casefold() == namespace]
+        repos = filter_repos(eligible, repo_filters)
+        user.setdefault("public_repos", None)
         events = [] if is_group else self.get_events(str(raw_user["id"]), limit=10)
         # GitLab's public GraphQL API has no stable equivalent of GitHub's
         # profile contribution calendar. Do not manufacture one from events.
@@ -265,6 +294,9 @@ class GitLabClient(BaseProviderClient):
             viewer_mode=viewer_mode,
             authenticated_login=authenticated_login,
             graphql=graphql,
+            provider=self.provider_name,
+            measurements=profile_measurements(user, self.provider_name),
+            repository_coverage=repository_coverage(fetched, repos, viewer_mode, repo_filters, len(eligible)),
         )
 
     def get_user(self, username: str) -> dict[str, Any]:
@@ -295,16 +327,15 @@ class GitLabClient(BaseProviderClient):
         projects = self._paginate(path, params=params, cache_key=cache_key)
         return [self._normalize_project(project) for project in projects]
 
-    def get_languages(self, languages_url: str) -> dict[str, int]:
+    def get_languages(self, languages_url: str) -> dict[str, int | float]:
         if not languages_url.startswith("gitlab://project/"):
             return {}
         project_id = languages_url.rsplit("/", 1)[-1]
-        payload = self._get_json_optional(
+        return self._language_data(
             f"/projects/{quote(project_id, safe='')}/languages",
             cache_key=self._cache_key("languages", project_id),
-            default={},
+            unit="percent",
         )
-        return payload if isinstance(payload, dict) else {}
 
     def get_events(self, username: str, limit: int = 10) -> list[dict[str, Any]]:
         user_id = username if str(username).isdigit() else str(self._resolve_user(username)["id"])
@@ -381,7 +412,7 @@ class GitLabClient(BaseProviderClient):
         project = self._get_json(f"/projects/{quote(owner + '/' + name, safe='')}", cache_key=self._cache_key("repo", owner, name))
         return self._normalize_project(project)
 
-    def get_repo_languages(self, owner: str, name: str) -> dict[str, int]:
+    def get_repo_languages(self, owner: str, name: str) -> dict[str, int | float]:
         repo = self.get_repo(owner, name)
         return self.get_languages(repo.get("languages_url", ""))
 
@@ -394,7 +425,7 @@ class GitLabClient(BaseProviderClient):
         )
         if not isinstance(contributors, list):
             return []
-        return [{"login": c.get("name") or c.get("email") or "unknown", "contributions": c.get("commits", 0)} for c in contributors[:limit]]
+        return [{"login": c.get("name") or c.get("email") or "unknown", "contributions": c.get("commits")} for c in contributors[:limit]]
 
     def get_repo_commits(self, owner: str, name: str, limit: int = 5) -> list[dict[str, Any]]:
         project = self.get_repo(owner, name)
@@ -573,9 +604,9 @@ class GitLabClient(BaseProviderClient):
             "html_url": raw.get("web_url"),
             "created_at": raw.get("created_at"),
             "updated_at": raw.get("last_activity_on") or raw.get("created_at"),
-            "followers": raw.get("followers", 0),
-            "following": raw.get("following", 0),
-            "public_gists": 0,
+            "followers": raw.get("followers"),
+            "following": raw.get("following"),
+            "public_gists": None,
         }
 
     def _normalize_project(self, raw: dict[str, Any]) -> dict[str, Any]:
@@ -589,25 +620,25 @@ class GitLabClient(BaseProviderClient):
             "full_name": full_name,
             "description": raw.get("description"),
             "html_url": raw.get("web_url"),
-            "stargazers_count": raw.get("star_count", 0),
-            "forks_count": raw.get("forks_count", 0),
-            "watchers_count": raw.get("star_count", 0),
-            "open_issues_count": raw.get("open_issues_count", 0),
-            "size": 0,
+            "stargazers_count": raw.get("star_count"),
+            "forks_count": raw.get("forks_count"),
+            "watchers_count": None,
+            "open_issues_count": raw.get("open_issues_count"),
+            "size": (raw.get("statistics") or {}).get("repository_size"),
             "language": None,
             "languages_url": f"gitlab://project/{raw.get('id')}",
             "created_at": raw.get("created_at"),
             "updated_at": raw.get("last_activity_at") or raw.get("updated_at"),
-            "pushed_at": raw.get("last_activity_at") or raw.get("updated_at"),
+            "pushed_at": raw.get("pushed_at"),
             "archived": bool(raw.get("archived")),
             "fork": bool(raw.get("forked_from_project")),
             "is_template": False,
-            "private": raw.get("visibility") != "public",
+            "private": raw.get("visibility") != "public" if raw.get("visibility") is not None else None,
             "has_issues": raw.get("issues_enabled", True),
             "topics": topics,
             "default_branch": raw.get("default_branch") or "main",
             "license": {"spdx_id": license_payload.get("spdx_identifier") or license_payload.get("nickname") or license_payload.get("name")} if license_payload else None,
-            "owner": {"login": namespace.get("path") or namespace.get("full_path") or "", "avatar_url": raw.get("avatar_url")},
+            "owner": {"login": namespace.get("full_path") or namespace.get("path") or "", "avatar_url": raw.get("avatar_url")},
         }
 
     def _normalize_group(self, raw: dict[str, Any]) -> dict[str, Any]:
@@ -620,14 +651,15 @@ class GitLabClient(BaseProviderClient):
             "location": "",
             "email": "",
             "avatar_url": raw.get("avatar_url"),
-            "public_repos": raw.get("projects_count", 0),
-            "followers": 0,
+            "public_repos": raw.get("public_repos"),
+            "followers": None,
         }
 
     def _normalize_event(self, raw: dict[str, Any]) -> dict[str, Any]:
         action = str(raw.get("action_name") or raw.get("target_type") or "Event")
         event_type = "PushEvent" if "push" in action.lower() else action.replace(" ", "_")
-        commits: list[dict[str, Any]] = [{}] * int((raw.get("push_data") or {}).get("commit_count", 0) or 0)
+        count = number((raw.get("push_data") or {}).get("commit_count"))
+        commits: list[dict[str, Any]] | None = [{}] * int(count) if count is not None else None
         return {
             **raw,
             "type": event_type,
@@ -710,9 +742,9 @@ class GiteaClient(BaseProviderClient):
             if response.status_code == 404:
                 raise GitHubAPIError(f"{self.provider_title} user or resource not found")
             if response.status_code == 401:
-                raise GitHubAPIError(f"{self.provider_title} authentication failed")
+                raise GitHubAPIError(f"{self.provider_title} authentication failed", status_code=401)
             if response.status_code == 403:
-                raise GitHubAPIError(f"{self.provider_title} rejected request: {self._message(response)}")
+                raise GitHubAPIError(f"{self.provider_title} rejected request: {self._message(response)}", status_code=response.status_code)
             if not response.ok:
                 raise GitHubAPIError(f"{self.provider_title} API returned HTTP {response.status_code}")
             payload = response.json()
@@ -739,8 +771,14 @@ class GiteaClient(BaseProviderClient):
             if authenticated_login and authenticated_login.lower() == username.lower():
                 user = viewer
                 viewer_mode = True
-        repos = filter_repos(self.get_repos(username, viewer_mode=viewer_mode), repo_filters)
-        user["public_repos"] = len(repos)
+        fetched = self.get_repos(username, viewer_mode=viewer_mode)
+        eligible = [repo for repo in fetched if viewer_mode or repo.get("private") is False]
+        # /user/repos can include collaborations; viewer profile metrics are owned repositories.
+        if viewer_mode:
+            eligible = [repo for repo in eligible
+                        if str((repo.get("owner") or {}).get("login", "")).casefold() == username.casefold()]
+        repos = filter_repos(eligible, repo_filters)
+        user.setdefault("public_repos", None)
         events = self.get_events(username, limit=10)
         heatmap = self.get_heatmap(username) if include_graphql else []
         graphql = self._graphql_like_bundle(username, heatmap) if include_graphql else {}
@@ -752,6 +790,10 @@ class GiteaClient(BaseProviderClient):
             viewer_mode=viewer_mode,
             authenticated_login=authenticated_login,
             graphql=graphql,
+            provider=self.provider_name,
+            measurements={**profile_measurements(user, self.provider_name),
+                          **({"contributions": heatmap.measurement} if isinstance(heatmap, HeatmapData) else {})},
+            repository_coverage=repository_coverage(fetched, repos, viewer_mode, repo_filters, len(eligible)),
         )
 
     def get_user(self, username: str) -> dict[str, Any]:
@@ -772,17 +814,27 @@ class GiteaClient(BaseProviderClient):
             )
         return [self._normalize_repo(repo) for repo in repos]
 
-    def get_languages(self, languages_url: str) -> dict[str, int]:
-        payload = self._get_json_optional(languages_url, cache_key=self._cache_key("languages", languages_url), default={})
-        return payload if isinstance(payload, dict) else {}
+    def get_languages(self, languages_url: str) -> dict[str, int | float]:
+        return self._language_data(languages_url, self._cache_key("languages", languages_url), "bytes")
 
     def get_heatmap(self, username: str) -> list[dict[str, Any]]:
-        payload = self._get_json_optional(
-            f"/users/{quote(username, safe='')}/heatmap",
-            cache_key=self._cache_key("heatmap", username),
-            default=[],
-        )
-        return payload if isinstance(payload, list) else []
+        path = f"/users/{quote(username, safe='')}/heatmap"
+        measurement = Measurement(provider=self.provider_name, unit="activity records", scope="viewer-visible activity",
+                                  source=path, reason="API does not report a coverage interval or visibility completeness")
+        try:
+            payload = self._get_json(path, cache_key=self._cache_key("heatmap", username))
+            if not isinstance(payload, list):
+                raise TypeError("invalid heatmap response")
+        except (GitHubAPIError, requests.RequestException, ValueError, TypeError) as exc:
+            status: Availability = "auth_required" if isinstance(exc, GitHubAPIError) and exc.status_code in {401, 403} else "unavailable"
+            return HeatmapData([], replace(measurement, availability=status, reason=str(exc)))
+        weeks = _contribution_days_from_heatmap(payload)
+        days = [day for week in weeks for day in week["contributionDays"]]
+        if payload and not days:
+            return HeatmapData(payload, replace(measurement, availability="unavailable", reason="no valid heatmap records"))
+        return HeatmapData(payload, replace(measurement, value=sum(d["contributionCount"] for d in days),
+                                           sample_size=len(days), start=days[0]["date"] if days else None,
+                                           end=days[-1]["date"] if days else None))
 
     def get_events(self, username: str, limit: int = 10) -> list[dict[str, Any]]:
         events = self._get_json_optional(
@@ -851,7 +903,7 @@ class GiteaClient(BaseProviderClient):
         )
         return self._normalize_repo(repo)
 
-    def get_repo_languages(self, owner: str, name: str) -> dict[str, int]:
+    def get_repo_languages(self, owner: str, name: str) -> dict[str, int | float]:
         repo = self.get_repo(owner, name)
         return self.get_languages(repo.get("languages_url", ""))
 
@@ -970,14 +1022,12 @@ class GiteaClient(BaseProviderClient):
         return {"rate": {"remaining": 0, "limit": 0}}
 
     def _graphql_like_bundle(self, username: str, heatmap: list[dict[str, Any]]) -> dict[str, Any]:
+        if isinstance(heatmap, HeatmapData) and heatmap.measurement.availability != "available":
+            return {}
         days = _contribution_days_from_heatmap(heatmap)
         total = sum(day["contributionCount"] for week in days for day in week["contributionDays"])
         return {
             "contributionsCollection": {
-                "totalCommitContributions": total,
-                "totalIssueContributions": 0,
-                "totalPullRequestContributions": 0,
-                "totalPullRequestReviewContributions": 0,
                 "contributionCalendar": {"totalContributions": total, "weeks": days},
             },
         }
@@ -1019,9 +1069,9 @@ class GiteaClient(BaseProviderClient):
             "html_url": raw.get("html_url"),
             "created_at": raw.get("created") or raw.get("created_at"),
             "updated_at": raw.get("updated_at") or last_login or raw.get("created") or raw.get("created_at"),
-            "followers": raw.get("followers_count", 0),
-            "following": raw.get("following_count", 0),
-            "public_gists": 0,
+            "followers": raw.get("followers_count"),
+            "following": raw.get("following_count"),
+            "public_gists": None,
         }
 
     def _normalize_repo(self, raw: dict[str, Any]) -> dict[str, Any]:
@@ -1035,21 +1085,21 @@ class GiteaClient(BaseProviderClient):
             "description": raw.get("description"),
             "homepage": raw.get("website") or raw.get("link") or "",
             "html_url": raw.get("html_url"),
-            "stargazers_count": raw.get("stars_count", raw.get("stargazers_count", 0)),
-            "forks_count": raw.get("forks_count", 0),
-            "watchers_count": raw.get("watchers_count", raw.get("stars_count", 0)),
-            "subscribers_count": raw.get("watchers_count", 0),
-            "open_issues_count": raw.get("open_issues_count", 0),
-            "size": raw.get("size", 0),
+            "stargazers_count": raw.get("stars_count", raw.get("stargazers_count")),
+            "forks_count": raw.get("forks_count"),
+            "watchers_count": raw.get("watchers_count"),
+            "subscribers_count": raw.get("watchers_count"),
+            "open_issues_count": raw.get("open_issues_count"),
+            "size": raw.get("size"),
             "language": raw.get("language"),
             "languages_url": raw.get("languages_url"),
             "created_at": raw.get("created_at"),
             "updated_at": raw.get("updated_at"),
-            "pushed_at": raw.get("updated_at"),
+            "pushed_at": raw.get("pushed_at"),
             "archived": bool(raw.get("archived")),
             "fork": bool(raw.get("fork")),
             "is_template": bool(raw.get("template")),
-            "private": bool(raw.get("private") or raw.get("internal")),
+            "private": bool(raw.get("private") or raw.get("internal")) if "private" in raw else None,
             "has_issues": bool(raw.get("has_issues", False)),
             "topics": raw.get("topics") or [],
             "default_branch": raw.get("default_branch") or "main",
@@ -1070,8 +1120,8 @@ class GiteaClient(BaseProviderClient):
             "location": raw.get("location") or "",
             "email": raw.get("email") or "",
             "avatar_url": raw.get("avatar_url"),
-            "public_repos": raw.get("public_repos", 0),
-            "followers": raw.get("followers_count", 0),
+            "public_repos": raw.get("public_repos"),
+            "followers": raw.get("followers_count"),
         }
 
     def _normalize_event(self, raw: dict[str, Any]) -> dict[str, Any]:
@@ -1083,7 +1133,7 @@ class GiteaClient(BaseProviderClient):
             "type": event_type,
             "repo": {"name": repo.get("full_name") or repo.get("name") or "unknown repo"},
             "created_at": raw.get("created") or raw.get("created_at"),
-            "payload": {"commits": [{}] if "push" in op_type else []},
+            "payload": {"commits": None},
         }
 
     def _normalize_commit(self, raw: dict[str, Any]) -> dict[str, Any]:
@@ -1186,7 +1236,7 @@ class BitbucketClient(BaseProviderClient):
             if response.status_code == 404:
                 raise GitHubAPIError(f"{self.provider_title} user or resource not found")
             if response.status_code in {401, 403}:
-                raise GitHubAPIError(f"{self.provider_title} rejected request: {self._message(response)}")
+                raise GitHubAPIError(f"{self.provider_title} rejected request: {self._message(response)}", status_code=response.status_code)
             if not response.ok:
                 raise GitHubAPIError(f"{self.provider_title} API returned HTTP {response.status_code}")
             payload = response.json()
@@ -1201,8 +1251,10 @@ class BitbucketClient(BaseProviderClient):
         self, username: str, mode: str, repo_filters: dict[str, Any], include_graphql: bool = True
     ) -> GitHubContext:
         user = self.get_user(username)
-        repos = filter_repos(self.get_repos(username, viewer_mode=False), repo_filters)
-        user["public_repos"] = len(repos)
+        fetched = self.get_repos(username, viewer_mode=False)
+        eligible = [repo for repo in fetched if repo.get("private") is False]
+        repos = filter_repos(eligible, repo_filters)
+        user.setdefault("public_repos", None)
         events = self._events_from_repos(username, repos, limit=30)
         return GitHubContext(
             target_user=username,
@@ -1212,6 +1264,9 @@ class BitbucketClient(BaseProviderClient):
             viewer_mode=False,
             authenticated_login=None,
             graphql={},
+            provider=self.provider_name,
+            measurements=profile_measurements(user, self.provider_name),
+            repository_coverage=repository_coverage(fetched, repos, False, repo_filters, len(eligible)),
         )
 
     def get_user(self, username: str) -> dict[str, Any]:
@@ -1226,10 +1281,10 @@ class BitbucketClient(BaseProviderClient):
         )
         return [self._normalize_repo(repo) for repo in repos]
 
-    def get_languages(self, languages_url: str) -> dict[str, int]:
+    def get_languages(self, languages_url: str) -> dict[str, int | float]:
         if not languages_url.startswith("bitbucket://language/"):
             return {}
-        language = languages_url.rsplit("/", 1)[-1]
+        language = languages_url.removeprefix("bitbucket://language/")
         return {language: 1} if language and language != "n/a" else {}
 
     def get_social_accounts(self, username: str) -> list[dict[str, Any]]:
@@ -1304,7 +1359,7 @@ class BitbucketClient(BaseProviderClient):
         size = payload.get("size") if isinstance(payload, dict) else None
         return size if isinstance(size, int) else None
 
-    def get_repo_languages(self, owner: str, name: str) -> dict[str, int]:
+    def get_repo_languages(self, owner: str, name: str) -> dict[str, int | float]:
         repo = self.get_repo(owner, name)
         return self.get_languages(repo.get("languages_url", ""))
 
@@ -1447,9 +1502,9 @@ class BitbucketClient(BaseProviderClient):
             "html_url": ((links.get("html") or {}).get("href")),
             "created_at": raw.get("created_on"),
             "updated_at": raw.get("updated_on") or raw.get("created_on"),
-            "public_gists": 0,
-            "followers": 0,
-            "following": 0,
+            "public_gists": None,
+            "followers": None,
+            "following": None,
         }
 
     def _normalize_repo(self, raw: dict[str, Any]) -> dict[str, Any]:
@@ -1467,16 +1522,16 @@ class BitbucketClient(BaseProviderClient):
             "forks_count": None,
             "watchers_count": None,
             "open_issues_count": None,
-            "size": raw.get("size", 0),
+            "size": raw.get("size"),
             "language": language if language != "n/a" else None,
             "languages_url": f"bitbucket://language/{language}",
             "created_at": raw.get("created_on"),
             "updated_at": raw.get("updated_on"),
-            "pushed_at": raw.get("updated_on"),
+            "pushed_at": raw.get("pushed_at"),
             "archived": False,
             "fork": bool(raw.get("parent")),
             "is_template": False,
-            "private": bool(raw.get("is_private")),
+            "private": bool(raw.get("is_private")) if "is_private" in raw else None,
             "has_issues": bool(raw.get("has_issues", False)),
             "topics": [],
             "default_branch": (raw.get("mainbranch") or {}).get("name") or "main",
@@ -1501,28 +1556,32 @@ class BitbucketClient(BaseProviderClient):
 
 
 def _contribution_days_from_heatmap(points: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    today = datetime.now(timezone.utc).date()
-    start = today - timedelta(days=83)
+    """Group actual timestamped records into UTC Sunday-based weeks.
+
+    Missing dates remain absent: the endpoint does not describe coverage and an
+    empty response can also mean activity is not visible to the viewer.
+    """
     counts: Counter[str] = Counter()
     for point in points:
-        try:
-            day = datetime.fromtimestamp(int(point.get("timestamp", 0)), timezone.utc).date()
-        except (TypeError, ValueError, OSError):
+        if not isinstance(point, dict):
             continue
-        if start <= day <= today:
-            counts[day.isoformat()] += int(point.get("contributions", 0) or 0)
-    weeks: list[dict[str, Any]] = []
-    cursor = start
-    while cursor <= today:
-        week_days = []
-        for _ in range(7):
-            if cursor > today:
-                break
-            iso = cursor.isoformat()
-            week_days.append({"date": iso, "contributionCount": counts[iso]})
-            cursor += timedelta(days=1)
-        weeks.append({"contributionDays": week_days})
-    return weeks
+        try:
+            stamp = point.get("timestamp")
+            if not isinstance(stamp, (int, float)) or isinstance(stamp, bool):
+                continue
+            day = datetime.fromtimestamp(stamp, timezone.utc).date()
+            count = number(point.get("contributions"))
+            if count is None or int(count) != count:
+                continue
+        except (TypeError, ValueError, OverflowError, OSError):
+            continue
+        counts[day.isoformat()] += int(count)
+    weeks: dict[str, list[dict[str, Any]]] = {}
+    for iso, count in sorted(counts.items()):
+        day = datetime.fromisoformat(iso).date()
+        sunday = day - timedelta(days=(day.weekday() + 1) % 7)
+        weeks.setdefault(sunday.isoformat(), []).append({"date": iso, "contributionCount": count})
+    return [{"contributionDays": days} for days in weeks.values()]
 
 
 def provider_name_from_config(config: dict[str, Any]) -> str:

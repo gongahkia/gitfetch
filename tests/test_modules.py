@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest import mock
 
@@ -84,10 +85,14 @@ class ModuleTests(unittest.TestCase):
                 "contributionCalendar": {"weeks": [{"contributionDays": days}]}
             }
         }
-        result = module_streaks(_config_with("streaks", {}), _ctx_with_graphql(graphql), mock.Mock())
+        frozen = mock.Mock(wraps=datetime)
+        frozen.now.return_value = datetime(2024, 2, 5, tzinfo=timezone.utc)
+        with mock.patch("gitfetch.modules.builtin.datetime", frozen):
+            result = module_streaks(_config_with("streaks", {}), _ctx_with_graphql(graphql), mock.Mock())
         self.assertFalse(result.hidden)
         self.assertEqual(result.data["longest"], 5)
-        self.assertEqual(result.data["current"], 3)
+        # A historical window cannot establish a current streak.
+        self.assertIsNone(result.data["current"])
         self.assertEqual(result.data["total"], 11)
 
     def test_sparkline_emits_blocks_and_meta(self) -> None:

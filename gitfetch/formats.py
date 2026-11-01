@@ -11,6 +11,7 @@ from PIL import Image, ImageDraw, ImageFont
 from gitfetch.images import fetch_avatar_image
 from gitfetch.language_icons import language_icon_data_uri, language_icon_image
 from gitfetch.modules.builtin import ModuleResult
+from gitfetch.terminal_text import cell_width, clip_text, sanitize_styled_text, sanitize_text
 
 ANSI_TOKEN_RE = re.compile(r"\x1b\[([0-9;]*)m")
 
@@ -22,8 +23,7 @@ NAMED_FG = {
 }
 
 def _truncate(text: Any, limit: int) -> str:
-    value = str(text)
-    return value if len(value) <= limit else value[: max(0, limit - 1)] + "…"
+    return clip_text(text, limit)
 
 
 CARD_PALETTE = {
@@ -97,8 +97,8 @@ def render_terminal_svg(text: str, config: dict[str, Any]) -> str:
     font_size = 14
     background = config["display"].get("svg_background", "#0d1117")
     foreground = config["display"].get("svg_foreground", "#c9d1d9")
-    raw_lines = text.split("\n")
-    visible_lengths = [len(ANSI_TOKEN_RE.sub("", line)) for line in raw_lines]
+    raw_lines = [sanitize_styled_text(line) for line in text.split("\n")]
+    visible_lengths = [cell_width(line) for line in raw_lines]
     max_len = max(visible_lengths) if visible_lengths else 0
     width = int(max_len * char_width + 32)
     height = int(len(raw_lines) * line_height + 32)
@@ -120,13 +120,13 @@ def render_terminal_svg(text: str, config: dict[str, Any]) -> str:
                 attrs.append(f'fill="{fg}"')
             if bg:
                 bg_x = 16 + x_offset * char_width
-                bg_w = len(visible) * char_width
+                bg_w = cell_width(visible) * char_width
                 bg_y = int(16 + i * line_height)
                 parts.insert(-1 - i, f'<rect x="{bg_x}" y="{bg_y}" width="{bg_w}" height="{int(line_height)}" fill="{bg}"/>')
             attr_str = " ".join(attrs)
             escaped = visible.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
             parts.append(f'<tspan {attr_str}>{escaped}</tspan>')
-            x_offset += len(visible)
+            x_offset += cell_width(visible)
         parts.append("</text>")
     parts.append("</g></svg>")
     return "\n".join(parts)
@@ -166,7 +166,7 @@ def _module_data(modules: list[ModuleResult], name: str) -> Any:
 def _module_lines_text(modules: list[ModuleResult], name: str) -> list[str]:
     for module in modules:
         if module.name == name:
-            return module.lines
+            return [sanitize_text(line) for line in module.lines]
     return []
 
 
@@ -209,9 +209,9 @@ def render_card_svg(config: dict[str, Any], user: dict[str, Any], modules: list[
 
     stats_y = 160
     stats_items: list[tuple[str, str]] = []
-    stats_items.append((str(user.get("public_repos", 0)), "repos"))
-    stats_items.append((str(user.get("followers", 0)), "followers"))
-    stats_items.append((str(user.get("following", 0)), "following"))
+    stats_items.append((_metric_value(user.get("public_repos")), "repos"))
+    stats_items.append((_metric_value(user.get("followers")), "followers"))
+    stats_items.append((_metric_value(user.get("following")), "following"))
     streaks = _module_data(modules, "streaks") or {}
     if streaks.get("current") is not None:
         stats_items.append((str(streaks["current"]), "current streak"))
@@ -222,7 +222,7 @@ def render_card_svg(config: dict[str, Any], user: dict[str, Any], modules: list[
     for i, (value, label) in enumerate(stats_items):
         x = 32 + int(i * column_w)
         parts.append(
-            f'<text x="{x}" y="{stats_y}" fill="{palette["text"]}" font-size="20" font-weight="600">{value}</text>'
+            f'<text x="{x}" y="{stats_y}" fill="{palette["text"]}" font-size="20" font-weight="600">{_xml_escape(value)}</text>'
         )
         parts.append(
             f'<text x="{x}" y="{stats_y + 18}" fill="{palette["muted"]}" font-size="12">{_xml_escape(label)}</text>'
@@ -304,9 +304,9 @@ def render_card_png(config: dict[str, Any], user: dict[str, Any], modules: list[
         draw.text((text_x, 108), _truncate(bio, bio_limit), fill=palette["muted"], font=small_font)
 
     stats = [
-        (str(user.get("public_repos", 0)), "repos"),
-        (str(user.get("followers", 0)), "followers"),
-        (str(user.get("following", 0)), "following"),
+        (_metric_value(user.get("public_repos")), "repos"),
+        (_metric_value(user.get("followers")), "followers"),
+        (_metric_value(user.get("following")), "following"),
     ]
     streaks = _module_data(modules, "streaks") or {}
     if streaks.get("current") is not None:
@@ -317,7 +317,7 @@ def render_card_png(config: dict[str, Any], user: dict[str, Any], modules: list[
     column_w = (width - 64) / max(1, len(stats))
     for i, (value, label) in enumerate(stats):
         x = 32 + int(i * column_w)
-        draw.text((x, 150), value, fill=palette["text"], font=title_font)
+        draw.text((x, 150), sanitize_text(value), fill=palette["text"], font=title_font)
         draw.text((x, 178), label, fill=palette["muted"], font=small_font)
 
     languages = _module_data(modules, "languages") or []
@@ -380,7 +380,7 @@ def render_summary_card_svg(
         parts.append(f'<text x="32" y="{y}" fill="{palette["muted"]}" font-size="11" letter-spacing="1.2">{_xml_escape(module.title.upper())}</text>')
         y += 18
         for line in module.lines[:4]:
-            parts.append(f'<text x="32" y="{y}" fill="{palette["text"]}" font-size="12">{_xml_escape(line[:95])}</text>')
+            parts.append(f'<text x="32" y="{y}" fill="{palette["text"]}" font-size="12">{_xml_escape(sanitize_text(line)[:95])}</text>')
             y += 16
             if y > height - 34:
                 break
@@ -427,10 +427,10 @@ def render_summary_card_png(
 
     y = 126
     for module in modules[:5]:
-        draw.text((32, y), module.title.upper(), fill=palette["muted"], font=small_font)
+        draw.text((32, y), sanitize_text(module.title).upper(), fill=palette["muted"], font=small_font)
         y += 18
         for line in module.lines[:4]:
-            draw.text((32, y), line[:95], fill=palette["text"], font=body_font)
+            draw.text((32, y), sanitize_text(line)[:95], fill=palette["text"], font=body_font)
             y += 16
             if y > height - 34:
                 break
@@ -442,4 +442,8 @@ def render_summary_card_png(
 
 
 def _xml_escape(text: str) -> str:
-    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+    return sanitize_text(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+
+
+def _metric_value(value: Any) -> str:
+    return "unavailable" if value is None else str(value)

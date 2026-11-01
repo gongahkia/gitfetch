@@ -125,7 +125,7 @@ class ModesTests(unittest.TestCase):
             self.assertIn("@github", out)
             self.assertIn("spec", out)
             self.assertIn("alice", out)
-            self.assertIn("total stars: 700", out)
+            self.assertIn("stars in fetched repos: 700", out)
 
     def test_compare_subcommand_renders_two_users(self, mock_client_factory: mock.Mock) -> None:
         instance = _configured_client(mock_client_factory)

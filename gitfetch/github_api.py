@@ -1,7 +1,7 @@
 import base64
 import hashlib
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
@@ -10,6 +10,13 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 from gitfetch.cache import CacheStore
+from gitfetch.semantics import (
+    LanguageData,
+    Measurement,
+    RepositoryCoverage,
+    profile_measurements,
+    repository_coverage,
+)
 
 USER_AGENT = "gitfetch/2.0.0"
 
@@ -33,9 +40,10 @@ def configure_http_retries(session: requests.Session) -> None:
 
 
 class GitHubAPIError(RuntimeError):
-    def __init__(self, message: str, *, rate_limited: bool = False) -> None:
+    def __init__(self, message: str, *, rate_limited: bool = False, status_code: int | None = None) -> None:
         super().__init__(message)
         self.rate_limited = rate_limited
+        self.status_code = status_code
 
 
 class ProviderSession(requests.Session):
@@ -57,6 +65,9 @@ class GitHubContext:
     viewer_mode: bool
     authenticated_login: str | None
     graphql: dict[str, Any]
+    provider: str = "github"
+    measurements: dict[str, Measurement] = field(default_factory=dict)
+    repository_coverage: RepositoryCoverage | None = None
 
 
 class GitHubClient:
@@ -97,8 +108,8 @@ class GitHubClient:
                 viewer_mode = True
                 public_user = viewer
 
-        repos = self.get_repos(username, viewer_mode=viewer_mode)
-        repos = filter_repos(repos, repo_filters)
+        fetched = self.get_repos(username, viewer_mode=viewer_mode)
+        repos = filter_repos(fetched, repo_filters)
         events = self.get_events(username)
         graphql = self.get_graphql_bundle(username) if self.token and include_graphql else {}
         return GitHubContext(
@@ -109,6 +120,9 @@ class GitHubClient:
             viewer_mode=viewer_mode,
             authenticated_login=authenticated_login,
             graphql=graphql,
+            provider=self.provider_name,
+            measurements=profile_measurements(public_user, self.provider_name),
+            repository_coverage=repository_coverage(fetched, repos, viewer_mode, repo_filters),
         )
 
     def _cache_key(self, prefix: str, *parts: str) -> str:
@@ -156,13 +170,13 @@ class GitHubClient:
         if response.status_code == 404:
             raise GitHubAPIError("GitHub user or resource not found")
         if response.status_code == 401:
-            raise GitHubAPIError("GitHub authentication failed")
+            raise GitHubAPIError("GitHub authentication failed", status_code=401)
         if response.status_code == 403:
             if response.headers.get("X-RateLimit-Remaining") == "0":
                 if stale is not None:
                     return stale
                 raise self._rate_limit_error(response)
-            raise GitHubAPIError(f"GitHub request forbidden: {response.json().get('message', '')}")
+            raise GitHubAPIError(f"GitHub request forbidden: {response.json().get('message', '')}", status_code=403)
         if not response.ok:
             raise GitHubAPIError(f"GitHub API returned HTTP {response.status_code}")
         payload = response.json()
@@ -238,21 +252,23 @@ class GitHubClient:
             cache_key=self._cache_key("repos", "public", username),
         )
 
-    def get_languages(self, languages_url: str) -> dict[str, int]:
+    def get_languages(self, languages_url: str) -> dict[str, int | float]:
         cache_key = self._cache_key("languages", languages_url)
         cached = self.cache.get(cache_key)
         if cached is not None:
-            return cached
+            return LanguageData(cached, Measurement(provider=self.provider_name, unit="bytes", source=languages_url))
         if self.offline:
             raise GitHubAPIError(f"offline mode: {languages_url} not available in cache")
         response = self.session.get(languages_url, timeout=20)
-        if response.status_code == 403:
-            raise GitHubAPIError(f"GitHub rate limited request: {response.json().get('message', '')}")
         if not response.ok:
-            return {}
+            raise GitHubAPIError(f"GitHub languages returned HTTP {response.status_code}",
+                                 status_code=response.status_code,
+                                 rate_limited=response.status_code == 429 or response.headers.get("X-RateLimit-Remaining") == "0")
         payload = response.json()
+        if not isinstance(payload, dict):
+            raise GitHubAPIError("invalid language response")
         self.cache.set(cache_key, payload)
-        return payload
+        return LanguageData(payload, Measurement(provider=self.provider_name, unit="bytes", source=languages_url))
 
     def get_social_accounts(self, username: str) -> list[dict[str, Any]]:
         return self._paginate(
@@ -380,7 +396,7 @@ class GitHubClient:
             cache_key=self._cache_key("repo", owner, name),
         )
 
-    def get_repo_languages(self, owner: str, name: str) -> dict[str, int]:
+    def get_repo_languages(self, owner: str, name: str) -> dict[str, int | float]:
         return self.get_languages(f"{self.base_url}/repos/{owner}/{name}/languages")
 
     def get_repo_contributors(self, owner: str, name: str, limit: int = 10) -> list[dict[str, Any]]:

@@ -8,9 +8,11 @@ import sys
 from typing import Any
 
 from PIL import Image
+from wcwidth import iter_graphemes
 
 from gitfetch.images import fetch_avatar_image
 from gitfetch.modules.builtin import ModuleResult
+from gitfetch.terminal_text import cell_width, sanitize_text
 
 COLOR_CODES = {
     "red": 91,
@@ -52,7 +54,7 @@ MIN_AVATAR_WIDTH = 20
 
 
 def visible_len(text: str) -> int:
-    return len(ANSI_RE.sub("", text))
+    return cell_width(text)
 
 
 def color_enabled(config: dict[str, Any], output_format: str) -> bool:
@@ -91,6 +93,7 @@ def _ansi_for(code: ThemeValue) -> str:
 
 
 def colorize(text: str, code: ThemeValue, enabled: bool) -> str:
+    text = sanitize_text(text)
     if not enabled or not code:
         return text
     seq = _ansi_for(code)
@@ -176,8 +179,9 @@ def apply_margin(text: str, margin: int) -> str:
 def module_lines(modules: list[ModuleResult], color_enabled: bool, palette: dict[str, ThemeValue]) -> list[str]:
     lines: list[str] = []
     for module in modules:
-        lines.append(colorize(module.title, palette["title"], color_enabled))
-        lines.append(colorize("-" * len(module.title), palette["dim"], color_enabled))
+        title = sanitize_text(module.title)
+        lines.append(colorize(title, palette["title"], color_enabled))
+        lines.append(colorize("-" * visible_len(title), palette["dim"], color_enabled))
         for raw in module.lines:
             lines.append(_paint_value_line(raw, color_enabled, palette))
         lines.append("")
@@ -190,6 +194,7 @@ _KEY_VALUE_RE = re.compile(r"^([A-Za-z][\w \-]*?):\s+(.+)$")
 
 
 def _paint_value_line(line: str, color_enabled: bool, palette: dict[str, ThemeValue]) -> str:
+    line = sanitize_text(line)
     if not color_enabled or not line:
         return line
     match = _KEY_VALUE_RE.match(line)
@@ -237,13 +242,14 @@ def avatar_to_ascii(avatar_url: str | None, width: int, chars: str) -> list[str]
 
 
 def _render_ascii(img: Image.Image, width: int, aspect: float, color_mode: str, ramp: str) -> list[str]:
-    chars = list(ramp)
+    chars = [char for char in iter_graphemes(sanitize_text(ramp)) if cell_width(char) == 1]
+    chars = chars or list("BS#&@$%*!:.")
     target_h = max(1, int(aspect * width * 0.55))
     gray = img.resize((width, target_h)).convert("L")
     gray_pixels = list(gray.getdata())
     if color_mode == "none":
-        joined = "".join(chars[min(len(chars) - 1, pixel * len(chars) // 256)] for pixel in gray_pixels)
-        return [joined[i:i + width] for i in range(0, len(joined), width)]
+        glyphs = [chars[min(len(chars) - 1, pixel * len(chars) // 256)] for pixel in gray_pixels]
+        return ["".join(glyphs[i:i + width]) for i in range(0, len(glyphs), width)]
     rgb = img.resize((width, target_h)).convert("RGB")
     rgb_pixels = list(rgb.getdata())
     lines = []

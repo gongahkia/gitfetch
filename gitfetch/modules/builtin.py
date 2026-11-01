@@ -4,11 +4,24 @@ import time
 from collections import Counter
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass
-from datetime import datetime, timezone
+from dataclasses import dataclass, replace
+from dataclasses import field as dataclass_field
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
-from gitfetch.github_api import GitHubClient, GitHubContext, format_relative_days
+import requests
+
+from gitfetch.github_api import GitHubAPIError, GitHubClient, GitHubContext, format_relative_days
+from gitfetch.semantics import (
+    Availability,
+    LanguageData,
+    Measurement,
+    RepositoryCoverage,
+    aggregate,
+    metric_text,
+    number,
+    profile_measurements,
+)
 
 HEATMAP_BLOCKS = [" ", "░", "▒", "▓", "█"]
 SPARKLINE_BLOCKS = [" ", "▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"]
@@ -26,6 +39,7 @@ class ModuleResult:
     data: Any
     hidden: bool = False
     requires_token: bool = False
+    measurements: dict[str, Measurement] = dataclass_field(default_factory=dict)
 
 
 def build_module_list(config: dict[str, Any]) -> list[str]:
@@ -72,11 +86,19 @@ def module_stats(config: dict[str, Any], context: GitHubContext, client: GitHubC
         lines.append(f"{age_hours} hours since joining {provider_title}")
     else:
         lines.append(f"join date unavailable on {provider_title}")
-    lines.append(f"{user.get('public_repos', len(context.repos))} public repos")
+    provider = getattr(client, "provider_name", "github")
+    measurements = profile_measurements(user, provider)
+    public_count = measurements["public_repos"]
+    lines.append(f"{metric_text(public_count.value)} public repos")
+    coverage = getattr(context, "repository_coverage", None)
+    if public_count.value is None and isinstance(coverage, RepositoryCoverage):
+        lines.append(f"{coverage.public} public repos fetched; {coverage.retained} repos selected")
     for field, label in (("public_gists", "public gists"), ("followers", "followers"), ("following", "following")):
-        value = user.get(field)
+        value = measurements[field].value
         if value is not None:
             lines.append(f"{value} {label}")
+        else:
+            lines.append(f"{label}: {measurements[field].availability}")
     if latest_public_event:
         relative = format_relative_days(latest_public_event)
         if relative:
@@ -93,70 +115,198 @@ def module_stats(config: dict[str, Any], context: GitHubContext, client: GitHubC
         private_count = sum(1 for repo in context.repos if repo.get("private"))
         if private_count:
             lines.append(f"{private_count} private repos visible in viewer mode")
-    return ModuleResult("stats", "Stats", lines, {"user": user, "viewer_mode": context.viewer_mode})
+    return ModuleResult("stats", "Stats", lines, {"user": user, "viewer_mode": context.viewer_mode},
+                        measurements=measurements)
 
 
 def module_languages(config: dict[str, Any], context: GitHubContext, client: GitHubClient) -> ModuleResult:
     settings = config["modules"]["languages"]
-    limit = settings.get("limit", 5)
+    limit = int(settings.get("limit", 5))
     workers = max(1, int(settings.get("workers", 4)))
     max_repos = int(settings.get("max_repos", 40))
-    totals: dict[str, int] = {}
-    all_urls: list[str] = [
-        url for repo in context.repos if isinstance((url := repo.get("languages_url")), str)
-    ]
+    provider = getattr(client, "provider_name", "github")
+    unit = getattr(client, "language_breakdown_unit", "bytes")
+    # GitLab percentages describe individual projects. Count repositories where
+    # a language was detected, preserving fractional percentages in repo mode.
+    prevalence = unit == "percent"
+    count_unit = "repositories" if prevalence or unit == "repositories" else "bytes"
+    all_urls = [repo["languages_url"] for repo in context.repos if repo.get("languages_url")]
     urls = all_urls if max_repos == 0 else all_urls[:max_repos]
+    totals: dict[str, int | float] = {}
+    failures: list[Measurement] = []
+    successful = 0
+    invalid = 0
 
-    def add_payload(payload: dict[str, int]) -> None:
-        for language, bytes_count in payload.items():
-            totals[language] = totals.get(language, 0) + int(bytes_count)
+    def collect(url: str) -> dict[str, int | float]:
+        try:
+            return client.get_languages(url)
+        except (GitHubAPIError, requests.RequestException, ValueError, TypeError) as exc:
+            auth = isinstance(exc, GitHubAPIError) and exc.status_code in {401, 403} and not exc.rate_limited
+            return LanguageData({}, Measurement(availability="auth_required" if auth else "unavailable", reason=str(exc)))
+
+    def add_payload(payload: dict[str, int | float]) -> None:
+        nonlocal successful, invalid
+        if isinstance(payload, LanguageData) and payload.measurement.availability != "available":
+            failures.append(payload.measurement)
+            return
+        successful += 1
+        for language, value in payload.items():
+            measured = number(value)
+            if measured is None or (unit != "percent" and int(measured) != measured):
+                invalid += 1
+                continue
+            if prevalence:
+                if measured > 0:
+                    totals[language] = totals.get(language, 0) + 1
+            else:
+                totals[language] = totals.get(language, 0) + int(measured)
 
     if workers == 1 or len(urls) <= 1:
         for url in urls:
-            add_payload(client.get_languages(url))
+            add_payload(collect(url))
     else:
         with ThreadPoolExecutor(max_workers=min(workers, len(urls))) as executor:
-            futures = [executor.submit(client.get_languages, url) for url in urls]
+            futures = [executor.submit(collect, url) for url in urls]
             for future in as_completed(futures):
                 add_payload(future.result())
-    total_bytes = sum(totals.values())
-    if not total_bytes:
-        return ModuleResult("languages", "Languages", [], {}, hidden=True)
-    ranked = sorted(totals.items(), key=lambda item: item[1], reverse=True)[:limit]
+    ranked_all = sorted(totals.items(), key=lambda item: (-item[1], item[0].casefold(), item[0]))
+    denominator = successful if count_unit == "repositories" else sum(totals.values())
     sampled = len(urls) < len(all_urls)
-    sample_note = f"sampled: {len(urls)}/{len(all_urls)} repos" if sampled else ""
-    if getattr(client, "language_breakdown_unit", "bytes") == "repositories":
+    missing = len(context.repos) - len(all_urls)
+    partial = sampled or bool(failures) or bool(missing) or bool(invalid)
+    coverage = getattr(context, "repository_coverage", None)
+    user = getattr(context, "user", {})
+    reported = number(user.get("public_repos")) if isinstance(user, dict) else None
+    complete_profile = (not partial and isinstance(coverage, RepositoryCoverage) and not coverage.filters
+                        and coverage.scope == "public owned repositories" and reported == len(context.repos))
+    status: Availability = "available" if successful or not context.repos else (
+        "auth_required" if failures and all(f.availability == "auth_required" for f in failures) else "unavailable")
+    measurement = Measurement(
+        value=sum(totals.values()) if status == "available" else None,
+        provider=provider, unit=count_unit,
+        scope="language prevalence in selected repositories" if prevalence else (
+            "primary language of selected repositories" if unit == "repositories" else "selected repository language bytes"),
+        availability=status, source="repository language endpoints" if unit != "repositories" else "repository primary-language metadata",
+        coverage="partial" if partial else "complete", sample_size=successful, denominator=denominator,
+        reason="; ".join(filter(None, [f"{len(failures)} failed requests" if failures else "",
+                                      f"{missing} repositories without language endpoints" if missing else "",
+                                      f"{invalid} invalid measurements" if invalid else ""])),
+        languages=tuple(language for language, _ in ranked_all), complete_profile=complete_profile,
+        eligible_repositories=len(context.repos), attempted=len(urls), failed=len(failures), missing=missing,
+        sampling_policy=f"first {max_repos or 'all'} repositories in provider response order",
+        language_totals=tuple(ranked_all),
+    )
+    metadata = {"languages": measurement}
+    if not ranked_all:
+        lines = [f"languages: {status}"] if status != "available" else []
+        return ModuleResult("languages", "Languages", lines, {}, hidden=not bool(lines), measurements=metadata)
+    ranked = ranked_all[:limit]
+    if count_unit == "repositories":
         lines = [f"{language} {count} repo(s)" for language, count in ranked]
-        if sample_note:
-            lines.append(sample_note)
         data = [{"language": language, "repositories": count} for language, count in ranked]
-        return ModuleResult("languages", "Languages (Repo Count)", lines, data)
-    lines = [f"{language} {count * 100 // total_bytes}%" for language, count in ranked]
-    if sample_note:
-        lines.append(sample_note)
-    data = [{"language": language, "bytes": count} for language, count in ranked]
-    return ModuleResult("languages", "Languages", lines, data)
+        title = "Languages (Repo Prevalence)" if prevalence else "Languages (Repo Count)"
+    else:
+        total = sum(totals.values())
+        lines = [f"{language} {int(count * 100 // total) if total else 0}%" for language, count in ranked]
+        data = [{"language": language, "bytes": count} for language, count in ranked]
+        title = "Languages"
+    if sampled:
+        lines.append(f"sampled: {len(urls)}/{len(all_urls)} repos")
+    if failures or missing or invalid:
+        lines.append(f"coverage: {successful}/{len(context.repos)} repos; incomplete")
+    if prevalence:
+        lines.append("repositories containing each language; not byte-weighted")
+    return ModuleResult("languages", title, lines, data, measurements=metadata)
+
+
+def _contribution_measurement(context: GitHubContext, client: GitHubClient) -> Measurement:
+    metadata = getattr(context, "measurements", {})
+    if isinstance(metadata, dict) and "contributions" in metadata:
+        return metadata["contributions"]
+    days = _flatten_contribution_days(context.graphql)
+    provider = getattr(context, "provider", "github")
+    if not isinstance(provider, str):
+        provider = "github"
+    calendar = context.graphql.get("contributionsCollection", {}).get("contributionCalendar", {})
+    if not days:
+        reported = number(calendar.get("totalContributions"))
+        if reported is not None:
+            return Measurement(reported, provider, "contributions", "provider contribution calendar",
+                               source="contributionCalendar", reason="calendar dates not returned")
+        status: Availability = "auth_required" if provider == "github" and not getattr(client, "token", "") else "unavailable"
+        return Measurement(provider=provider, unit="contributions", scope="provider contribution calendar",
+                           availability=status, reason="calendar not returned")
+    start, end = days[0]["date"], days[-1]["date"]
+    continuous = (datetime.fromisoformat(end) - datetime.fromisoformat(start)).days + 1 == len(days)
+    reported = number(calendar.get("totalContributions"))
+    return Measurement(value=reported if reported is not None else sum(d["contributionCount"] for d in days),
+                       provider=provider, unit="contributions",
+                       scope="provider contribution calendar", source="GraphQL contributionCalendar",
+                       coverage="complete" if continuous else "partial", sample_size=len(days), start=start, end=end)
+
+
+def _coverage_label(measurement: Measurement) -> str:
+    interval = f"{measurement.start} to {measurement.end}" if measurement.start else "unknown interval"
+    return f"coverage: {interval}; {measurement.coverage} (UTC)"
+
+
+def _window_measurement(days: list[dict[str, Any]], measurement: Measurement) -> Measurement:
+    if not days:
+        return replace(measurement, value=None, sample_size=0, start=None, end=None, availability="unavailable")
+    span = (datetime.fromisoformat(days[-1]["date"]) - datetime.fromisoformat(days[0]["date"])).days + 1
+    return replace(measurement, value=sum(day["contributionCount"] for day in days),
+                   sample_size=len(days), start=days[0]["date"], end=days[-1]["date"],
+                   coverage=measurement.coverage if span == len(days) else "partial")
+
+
+def _recent_days(context: GitHubContext, window: int) -> list[dict[str, Any]]:
+    days = _flatten_contribution_days(context.graphql)
+    if not days:
+        return []
+    start = datetime.fromisoformat(days[-1]["date"]) - timedelta(days=window - 1)
+    return [day for day in days if datetime.fromisoformat(day["date"]) >= start]
 
 
 def module_contributions(config: dict[str, Any], context: GitHubContext, client: GitHubClient) -> ModuleResult:
-    weeks = context.graphql.get("contributionsCollection", {}).get("contributionCalendar", {}).get("weeks", [])
-    if not weeks:
-        return ModuleResult("contributions", "Contributions", [], [], hidden=True, requires_token=True)
+    measurement = _contribution_measurement(context, client)
+    metadata = {"contributions": measurement}
+    observed = _flatten_contribution_days(context.graphql)
+    if not observed:
+        line = ("no activity records returned; coverage unknown" if measurement.availability == "available"
+                else f"contributions: {measurement.availability}")
+        return ModuleResult("contributions", "Contributions", [line], [],
+                            requires_token=measurement.provider == "github", measurements=metadata)
     num_weeks = config["display"]["heatmap_weeks"]
-    recent = weeks[-num_weeks:] if len(weeks) > num_weeks else weeks
-    max_count = max((day["contributionCount"] for week in recent for day in week["contributionDays"]), default=1) or 1
+    # Preserve real calendar spacing even when the provider omits entire weeks.
+    by_week: dict[date, list[dict[str, Any]]] = {}
+    for day in observed:
+        date = datetime.fromisoformat(day["date"])
+        sunday = (date - timedelta(days=(date.weekday() + 1) % 7)).date()
+        by_week.setdefault(sunday, []).append(day)
+    last = max(by_week)
+    recent = [{"contributionDays": by_week.get(last - timedelta(weeks=offset), [])}
+              for offset in reversed(range(num_weeks))]
+    # Avoid adding leading empty weeks beyond the actual observed interval.
+    while recent and not recent[0]["contributionDays"]:
+        recent.pop(0)
+    recent_days = sorted((day for week in recent for day in week["contributionDays"]), key=lambda day: day["date"])
+    measurement = _window_measurement(recent_days, measurement)
+    metadata["contributions"] = measurement
+    max_count = max((day["contributionCount"] for week in recent for day in week["contributionDays"]), default=0) or 1
     lines: list[str] = []
     for day_idx in range(7):
         row = ""
         for week in recent:
-            days = week["contributionDays"]
-            if day_idx < len(days):
-                level = min(4, days[day_idx]["contributionCount"] * 4 // max_count)
-                row += HEATMAP_BLOCKS[level]
-            else:
-                row += " "
+            days = {(datetime.fromisoformat(day["date"]).weekday() + 1) % 7: day
+                    for day in week["contributionDays"]}
+            selected_day = days.get(day_idx)
+            count = selected_day["contributionCount"] if selected_day else 0
+            level = min(4, max(1, count * 4 // max_count)) if count else 0
+            row += HEATMAP_BLOCKS[level]
         lines.append(row)
-    return ModuleResult("contributions", "Contributions", lines, recent, requires_token=True)
+    lines.append(_coverage_label(measurement))
+    return ModuleResult("contributions", "Contributions", lines, recent,
+                        requires_token=measurement.provider == "github", measurements=metadata)
 
 
 def module_social_accounts(config: dict[str, Any], context: GitHubContext, client: GitHubClient) -> ModuleResult:
@@ -289,9 +439,8 @@ def module_profile_readme(config: dict[str, Any], context: GitHubContext, client
 def module_top_repos(config: dict[str, Any], context: GitHubContext, client: GitHubClient) -> ModuleResult:
     limit = config["modules"]["top_repos"].get("limit", 5)
     repos = sorted(
-        context.repos,
-        key=lambda repo: (repo.get("stargazers_count", 0), repo.get("updated_at", "")),
-        reverse=True,
+        [repo for repo in context.repos if number(repo.get("stargazers_count")) is not None],
+        key=lambda repo: (-repo["stargazers_count"], str(repo.get("full_name") or repo.get("name") or "").casefold()),
     )[:limit]
     lines, data = _repo_lines(repos, limit)
     return ModuleResult("top_repos", "Top Repos", lines, data, hidden=not bool(lines))
@@ -511,20 +660,20 @@ def module_contribution_breakdown(config: dict[str, Any], context: GitHubContext
     if not contrib:
         return ModuleResult("contribution_breakdown", "Contribution Breakdown", [], {}, hidden=True, requires_token=True)
     lines = [
-        f"commits: {contrib.get('totalCommitContributions', 0)}",
-        f"issues: {contrib.get('totalIssueContributions', 0)}",
-        f"pull requests: {contrib.get('totalPullRequestContributions', 0)}",
-        f"reviews: {contrib.get('totalPullRequestReviewContributions', 0)}",
+        f"commits: {metric_text(contrib.get('totalCommitContributions'))}",
+        f"issues: {metric_text(contrib.get('totalIssueContributions'))}",
+        f"pull requests: {metric_text(contrib.get('totalPullRequestContributions'))}",
+        f"reviews: {metric_text(contrib.get('totalPullRequestReviewContributions'))}",
     ]
     calendar = contrib.get("contributionCalendar") or {}
     if calendar.get("totalContributions") is not None:
         lines.append(f"calendar total: {calendar.get('totalContributions', 0)}")
     data = {
-        "commits": contrib.get("totalCommitContributions", 0),
-        "issues": contrib.get("totalIssueContributions", 0),
-        "pull_requests": contrib.get("totalPullRequestContributions", 0),
-        "reviews": contrib.get("totalPullRequestReviewContributions", 0),
-        "calendar_total": calendar.get("totalContributions", 0),
+        "commits": contrib.get("totalCommitContributions"),
+        "issues": contrib.get("totalIssueContributions"),
+        "pull_requests": contrib.get("totalPullRequestContributions"),
+        "reviews": contrib.get("totalPullRequestReviewContributions"),
+        "calendar_total": calendar.get("totalContributions"),
     }
     return ModuleResult("contribution_breakdown", "Contribution Breakdown", lines, data, requires_token=True)
 
@@ -533,22 +682,26 @@ def module_commit_cadence(config: dict[str, Any], context: GitHubContext, client
     window = int(config["modules"]["commit_cadence"].get("days", 30))
     days = _flatten_contribution_days(context.graphql)
     if days:
-        recent = sorted(days, key=lambda d: d.get("date", ""))[-window:]
+        recent = _recent_days(context, window)
         active_days = sum(1 for day in recent if day.get("contributionCount", 0) > 0)
         total = sum(day.get("contributionCount", 0) for day in recent)
         peak = max((day.get("contributionCount", 0) for day in recent), default=0)
         lines = [
-            f"last {len(recent)} days: {total} contributions",
+            f"{len(recent)} observed days: {total} contributions",
             f"active days: {active_days}",
             f"peak day: {peak}",
         ]
-        return ModuleResult("commit_cadence", "Commit Cadence", lines, {"days": recent, "total": total, "active_days": active_days})
+        measurement = _window_measurement(recent, _contribution_measurement(context, client))
+        lines.append(_coverage_label(measurement))
+        return ModuleResult("commit_cadence", "Commit Cadence", lines, {"days": recent, "total": total, "active_days": active_days},
+                            measurements={"contributions": measurement})
 
     push_events = [event for event in context.events if event.get("type") == "PushEvent"]
-    commit_count = sum(len((event.get("payload") or {}).get("commits") or []) for event in push_events)
+    commit_count = (sum(len(event["payload"]["commits"]) for event in push_events)
+                    if all(isinstance((event.get("payload") or {}).get("commits"), list) for event in push_events) else None)
     lines = [
         f"push events shown: {len(push_events)}",
-        f"commits in public events: {commit_count}",
+        f"commits in public events: {metric_text(commit_count)}",
     ]
     data = {"push_events": len(push_events), "commits": commit_count}
     return ModuleResult("commit_cadence", "Commit Cadence", lines, data, hidden=not bool(push_events))
@@ -561,27 +714,29 @@ def module_maintainer_activity(config: dict[str, Any], context: GitHubContext, c
     now = datetime.now(timezone.utc)
     recent_pushes = 0
     stale = 0
-    open_issues = 0
-    stars = 0
-    forks = 0
+    known_dates = 0
+    open_issues = aggregate(repos, "open_issues_count")
+    stars = aggregate(repos, "stargazers_count")
+    forks = aggregate(repos, "forks_count")
     for repo in repos:
-        pushed = _parse_github_timestamp(repo.get("pushed_at") or repo.get("updated_at"))
+        pushed = _parse_github_timestamp(repo.get("pushed_at"))
+        if pushed:
+            known_dates += 1
         if pushed and (now - pushed).days <= 30:
             recent_pushes += 1
         if pushed and (now - pushed).days > 365:
             stale += 1
-        open_issues += int(repo.get("open_issues_count", 0) or 0)
-        stars += int(repo.get("stargazers_count", 0) or 0)
-        forks += int(repo.get("forks_count", 0) or 0)
+    recent_value = recent_pushes if known_dates else None
+    stale_value = stale if known_dates else None
     lines = [
-        f"pushed in 30d: {recent_pushes}/{len(repos)}",
-        f"stale >365d: {stale}",
-        f"open issues: {open_issues}",
-        f"stars/forks: {stars}/{forks}",
+        f"pushed in 30d (known dates): {metric_text(recent_value)}/{known_dates}",
+        f"stale >365d (known push dates): {metric_text(stale_value)}",
+        f"open issues in selected repos: {metric_text(open_issues)}",
+        f"stars/forks in selected repos: {metric_text(stars)}/{metric_text(forks)}",
     ]
     data = {
-        "recent_pushes_30_days": recent_pushes,
-        "stale_repos_over_365_days": stale,
+        "recent_pushes_30_days": recent_value,
+        "stale_repos_over_365_days": stale_value,
         "open_issues": open_issues,
         "stars": stars,
         "forks": forks,
@@ -591,60 +746,77 @@ def module_maintainer_activity(config: dict[str, Any], context: GitHubContext, c
 
 def _flatten_contribution_days(graphql: dict[str, Any]) -> list[dict[str, Any]]:
     weeks = graphql.get("contributionsCollection", {}).get("contributionCalendar", {}).get("weeks", [])
-    days: list[dict[str, Any]] = []
+    days: dict[str, dict[str, Any]] = {}
     for week in weeks:
-        days.extend(week.get("contributionDays", []))
-    return days
+        for day in week.get("contributionDays", []):
+            try:
+                parsed = datetime.strptime(day["date"], "%Y-%m-%d")
+            except (KeyError, TypeError, ValueError):
+                continue
+            count = number(day.get("contributionCount"))
+            if count is not None and isinstance(count, int) and parsed.date().isoformat() == day["date"]:
+                days[day["date"]] = day
+    return [days[key] for key in sorted(days)]
 
 
 def module_streaks(config: dict[str, Any], context: GitHubContext, client: GitHubClient) -> ModuleResult:
     days = _flatten_contribution_days(context.graphql)
+    measurement = _contribution_measurement(context, client)
     if not days:
-        return ModuleResult("streaks", "Streaks", [], {}, hidden=True, requires_token=True)
-    today_iso = time.strftime("%Y-%m-%d")
-    days_sorted = sorted(days, key=lambda d: d.get("date", ""))
-    longest = current = run = 0
-    for day in days_sorted:
-        if day.get("contributionCount", 0) > 0:
-            run += 1
-            longest = max(longest, run)
-        else:
-            run = 0
-    current = 0
-    for day in reversed(days_sorted):
-        date = day.get("date", "")
-        count = day.get("contributionCount", 0)
-        if not current and date == today_iso and count == 0:
+        return ModuleResult("streaks", "Streaks", [f"streaks: {measurement.availability if measurement.availability != 'available' else 'unavailable (coverage unknown)'}"],
+                            {}, requires_token=measurement.provider == "github", measurements={"contributions": measurement})
+    today = datetime.now(timezone.utc).date()
+    longest = run = 0
+    previous = None
+    counts = {}
+    for day in days:
+        date = datetime.fromisoformat(day["date"]).date()
+        if date > today:
             continue
-        if count > 0:
+        count = day["contributionCount"]
+        counts[date] = count
+        if previous is None or date != previous + timedelta(days=1):
+            run = 0
+        run = run + 1 if count > 0 else 0
+        longest = max(longest, run)
+        previous = date
+    current: int | None = None
+    cursor = today
+    # Allow today to be unfinished only when its zero is actually measured.
+    if counts.get(cursor) == 0:
+        cursor -= timedelta(days=1)
+    if cursor in counts:
+        current = 0
+        while counts.get(cursor, 0) > 0:
             current += 1
-        else:
-            break
-    total = sum(day.get("contributionCount", 0) for day in days_sorted)
+            cursor -= timedelta(days=1)
+    total = sum(counts.values())
     contrib = context.graphql.get("contributionsCollection", {})
-    lines = [
-        f"current: {current} day(s)",
-        f"longest: {longest} day(s)",
-        f"year total: {total}",
-    ]
-    if contrib.get("totalCommitContributions") is not None:
-        lines.append(f"commits: {contrib.get('totalCommitContributions', 0)}")
-        lines.append(f"reviews: {contrib.get('totalPullRequestReviewContributions', 0)}")
+    lines = [f"current observed: {metric_text(current)} day(s)", f"longest observed: {longest} day(s)",
+             f"window total: {total}", _coverage_label(measurement)]
+    for field, label in (("totalCommitContributions", "commits"), ("totalPullRequestReviewContributions", "reviews")):
+        if number(contrib.get(field)) is not None:
+            lines.append(f"{label}: {contrib[field]}")
     data = {"current": current, "longest": longest, "total": total}
-    return ModuleResult("streaks", "Streaks", lines, data, requires_token=True)
+    return ModuleResult("streaks", "Streaks", lines, data, requires_token=measurement.provider == "github", measurements={
+        "contributions": measurement,
+        "current": replace(measurement, value=current, unit="days", scope="observed current streak",
+                           availability="available" if current is not None else "unavailable"),
+        "longest": replace(measurement, value=longest, unit="days", scope="longest observed streak in window"),
+    })
 
 
 def module_pull_requests(config: dict[str, Any], context: GitHubContext, client: GitHubClient) -> ModuleResult:
     graphql = context.graphql
     if not graphql:
         return ModuleResult("pull_requests", "Pull Requests", [], {}, hidden=True, requires_token=True)
-    open_count = (graphql.get("openPRs") or {}).get("totalCount", 0)
-    merged_count = (graphql.get("mergedPRs") or {}).get("totalCount", 0)
-    closed_count = (graphql.get("closedPRs") or {}).get("totalCount", 0)
+    open_count = (graphql.get("openPRs") or {}).get("totalCount")
+    merged_count = (graphql.get("mergedPRs") or {}).get("totalCount")
+    closed_count = (graphql.get("closedPRs") or {}).get("totalCount")
     lines = [
-        f"open: {open_count}",
-        f"merged: {merged_count}",
-        f"closed: {closed_count}",
+        f"open: {metric_text(open_count)}",
+        f"merged: {metric_text(merged_count)}",
+        f"closed: {metric_text(closed_count)}",
     ]
     data = {"open": open_count, "merged": merged_count, "closed": closed_count}
     title = "Merge Requests" if getattr(client, "provider_name", "") == "gitlab" else "Pull Requests"
@@ -655,9 +827,9 @@ def module_issues(config: dict[str, Any], context: GitHubContext, client: GitHub
     graphql = context.graphql
     if not graphql:
         return ModuleResult("issues", "Issues", [], {}, hidden=True, requires_token=True)
-    open_count = (graphql.get("openIssues") or {}).get("totalCount", 0)
-    closed_count = (graphql.get("closedIssues") or {}).get("totalCount", 0)
-    lines = [f"open: {open_count}", f"closed: {closed_count}"]
+    open_count = (graphql.get("openIssues") or {}).get("totalCount")
+    closed_count = (graphql.get("closedIssues") or {}).get("totalCount")
+    lines = [f"open: {metric_text(open_count)}", f"closed: {metric_text(closed_count)}"]
     data = {"open": open_count, "closed": closed_count}
     return ModuleResult("issues", "Issues", lines, data, requires_token=True)
 
@@ -667,16 +839,16 @@ def module_rate_limit(config: dict[str, Any], context: GitHubContext, client: Gi
     core = (payload.get("resources") or {}).get("core") or payload.get("rate") or {}
     if not core:
         return ModuleResult("rate_limit", "Rate Limit", [], {}, hidden=True)
-    remaining = core.get("remaining", 0)
-    limit = core.get("limit", 0)
+    remaining = core.get("remaining")
+    limit = core.get("limit")
     reset = core.get("reset")
-    lines = [f"core: {remaining}/{limit}"]
+    lines = [f"core: {metric_text(remaining)}/{metric_text(limit)}"]
     if reset:
         secs = max(0, int(reset) - int(time.time()))
         lines.append(f"resets in: {secs // 60}m {secs % 60}s")
     graphql_bucket = (payload.get("resources") or {}).get("graphql") or {}
     if graphql_bucket:
-        lines.append(f"graphql: {graphql_bucket.get('remaining', 0)}/{graphql_bucket.get('limit', 0)}")
+        lines.append(f"graphql: {metric_text(graphql_bucket.get('remaining'))}/{metric_text(graphql_bucket.get('limit'))}")
     return ModuleResult("rate_limit", "Rate Limit", lines, payload)
 
 
@@ -688,8 +860,8 @@ def module_pinned(config: dict[str, Any], context: GitHubContext, client: GitHub
     for node in nodes[:limit]:
         if node.get("__typename") == "Repository":
             language = (node.get("primaryLanguage") or {}).get("name") or "n/a"
-            stars = node.get("stargazerCount", 0)
-            lines.append(f"{node.get('nameWithOwner')} ({language}, ★{stars})")
+            stars = node.get("stargazerCount")
+            lines.append(f"{node.get('nameWithOwner')} ({language}, ★{metric_text(stars)})")
         else:
             lines.append(f"gist: {node.get('name') or node.get('description') or 'untitled'}")
         data.append(node)
@@ -699,14 +871,25 @@ def module_pinned(config: dict[str, Any], context: GitHubContext, client: GitHub
 def module_sparkline(config: dict[str, Any], context: GitHubContext, client: GitHubClient) -> ModuleResult:
     days = _flatten_contribution_days(context.graphql)
     if not days:
-        return ModuleResult("sparkline", "Sparkline", [], {}, hidden=True, requires_token=True)
+        measurement = _contribution_measurement(context, client)
+        return ModuleResult("sparkline", "Sparkline", [f"sparkline: {measurement.availability if measurement.availability != 'available' else 'unavailable (coverage unknown)'}"],
+                            {}, requires_token=measurement.provider == "github", measurements={"contributions": measurement})
     window = int(config["modules"]["sparkline"].get("days", 30))
-    recent = sorted(days, key=lambda d: d.get("date", ""))[-window:]
+    recent = _recent_days(context, window)
     counts = [d.get("contributionCount", 0) for d in recent]
-    peak = max(counts) or 1
-    line = "".join(SPARKLINE_BLOCKS[min(len(SPARKLINE_BLOCKS) - 1, c * (len(SPARKLINE_BLOCKS) - 1) // peak)] for c in counts)
-    lines = [line, f"last {len(counts)} days, peak {peak}"]
-    return ModuleResult("sparkline", "Sparkline", lines, counts, requires_token=True)
+    peak = max(counts)
+    dated = {datetime.fromisoformat(day["date"]).date(): day["contributionCount"] for day in recent}
+    first, last = min(dated), max(dated)
+    line = ""
+    for offset in range((last - first).days + 1):
+        count = dated.get(first + timedelta(days=offset))
+        line += " " if count is None else SPARKLINE_BLOCKS[min(8, count * 8 // (peak or 1))]
+    measurement = _window_measurement(recent, _contribution_measurement(context, client))
+    lines = [line, f"{len(counts)} observed days, peak {peak}"]
+    if measurement.coverage != "complete":
+        lines[1] += f"; {measurement.coverage} coverage (gaps unknown)"
+    return ModuleResult("sparkline", "Sparkline", lines, counts, requires_token=measurement.provider == "github",
+                        measurements={"contributions": measurement})
 
 
 MODULE_HANDLERS: dict[str, Callable[[dict[str, Any], GitHubContext, GitHubClient], ModuleResult]] = {

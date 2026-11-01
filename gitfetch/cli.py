@@ -27,6 +27,8 @@ from gitfetch.modules import MODULE_HANDLERS, available_module_metadata, build_m
 from gitfetch.modules.builtin import GRAPHQL_MODULES, ModuleResult
 from gitfetch.providers import create_provider_client
 from gitfetch.render import render_output
+from gitfetch.semantics import Measurement
+from gitfetch.terminal_text import sanitize_text
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -147,13 +149,13 @@ def main(argv: list[str] | None = None) -> int:
             return handle_token_command(args)
         return handle_render_command(args)
     except ConfigError as exc:
-        print(f"config error: {exc}", file=sys.stderr)
+        print(sanitize_text(f"config error: {exc}"), file=sys.stderr)
         return 2
     except GitHubAPIError as exc:
-        print(f"api error: {exc}", file=sys.stderr)
+        print(sanitize_text(f"api error: {exc}"), file=sys.stderr)
         return 1
     except requests.RequestException as exc:
-        print(f"network error: {exc}", file=sys.stderr)
+        print(sanitize_text(f"network error: {exc}"), file=sys.stderr)
         return 1
 
 
@@ -255,7 +257,7 @@ def handle_modules_command(args: argparse.Namespace) -> int:
     load_plugin_modules(config)
     for name, meta in available_module_metadata().items():
         token_note = "token" if meta["token_required"] else "public"
-        print(f"{name:16} {token_note:6} {meta['description']}")
+        print(sanitize_text(f"{name:16} {token_note:6} {meta['description']}"))
     return 0
 
 
@@ -352,6 +354,8 @@ def _token_required_result(name: str, client=None) -> ModuleResult:
         [f"requires --token, {env_name}, or profile.token_command"],
         {"requires_token": True},
         requires_token=True,
+        measurements={name: Measurement(provider=getattr(client, "provider_name", "github"), availability="auth_required",
+                                        reason="module requires a token")},
     )
 
 
@@ -363,6 +367,7 @@ def _unsupported_provider_result(name: str, client) -> ModuleResult:
         title,
         [f"unsupported on {client.provider_title}: {reason}"],
         {"unsupported": True, "provider": client.provider_name, "reason": reason},
+        measurements={name: Measurement(provider=client.provider_name, availability="unsupported", reason=reason)},
     )
 
 
@@ -458,22 +463,27 @@ def handle_render_command(args: argparse.Namespace) -> int:
     if args.watch:
         if args.watch < 1:
             raise ConfigError("--watch interval must be at least 1 second")
-        run_watch_loop(render_once, args.watch)
+        output_format = args.format or config["display"].get("format", "ansi")
+        run_watch_loop(
+            render_once, args.watch,
+            clear_screen=output_format == "ansi" and sys.stdout.isatty(),
+        )
         return 0
     render_once()
     return 0
 
 
-def run_watch_loop(render_once, interval: int) -> None:
+def run_watch_loop(render_once, interval: int, *, clear_screen: bool = True) -> None:
     import time
     try:
         while True:
-            sys.stdout.write("\x1b[H\x1b[2J")
-            sys.stdout.flush()
+            if clear_screen:
+                sys.stdout.write("\x1b[H\x1b[2J")
+                sys.stdout.flush()
             try:
                 render_once()
             except GitHubAPIError as exc:
-                print(f"api error: {exc}", file=sys.stderr)
+                print(sanitize_text(f"api error: {exc}"), file=sys.stderr)
             time.sleep(interval)
     except KeyboardInterrupt:
         pass
