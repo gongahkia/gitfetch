@@ -140,7 +140,8 @@ output also receives font and security corrections, so it is an appearance
 compatibility path rather than a promise of exact old raster bytes.
 
 CLI flags > dotted overrides > saved TOML > defaults remains the existing rule.
-Mode commands now also pass through visual-preset/presentation/details flags.
+Summary cards reuse the same adaptive lane allocator, preserving mode-specific
+labels and measurements without re-parsing them. Mode commands now also pass through visual-preset/presentation/details flags.
 Config/module presets remain independent from visual presets.
 
 ## Sizing, overflow and details
@@ -183,8 +184,10 @@ resource limit. A bounded notice marks additional omitted rows.
 
 Auto/classic presentation retains the public `render_terminal_svg(text, config)`
 compatibility path; explicit `export_style=legacy` retains it with modern
-presentation too. Mode terminal SVGs retain their generic classic line adapter.
-Their viewport is now deterministic, including comparisons. Graphical export
+presentation too. Mode terminal SVGs retain their generic line/SGR adapter, while mapping its
+headings, foreground and background to the same export colors; the legacy
+setting retains the old palette path. Their viewport is now deterministic,
+including comparisons. Graphical export
 CLI paths do not discover terminal capabilities (except explicit
 `--graphics-info`, whose existing passive diagnostic behavior is preserved).
 
@@ -322,3 +325,7 @@ module-evaluation counts, hidden modules, cache reuse, and headless rendering.
 Nineteen tests were added; four preexisting tests in three files were adjusted to explicitly
 exercise legacy artwork or supply the selected stats module rather than relying
 on the now-fixed resurrection of disabled statistics. No test was deleted.
+
+During implementation HEAD advanced concurrently to `1f4c4c4475fb4203a7cbe2663e74f7453fcdf714`.
+That commit was preserved; the assistant did not commit, rebase, amend or reset.
+The final working tree includes subsequent focused export corrections.

@@ -132,6 +132,18 @@ class ExportDesignTests(unittest.TestCase):
                          if isinstance(n, Text))
         self.assertIn('0 followers', text)
         self.assertIn('unavailable following', text)
+        from gitfetch.semantics import Measurement
+        sampled = ModuleResult('stats', 'Stats', [], {'user': user}, measurements={
+            'stars': Measurement(7, unit='count', scope='selected repositories', coverage='partial', sample_size=2,
+                                 eligible_repositories=20)})
+        document = build_profile_document(user, [sampled], provider='github')
+        display = {**self.config['display'], 'card_width': 1200, 'card_height': 630}
+        text = '\n'.join(n.text for n in plan_profile_card(document, display, reference_date=REFERENCE).nodes
+                         if isinstance(n, Text))
+        self.assertIn('7 stars (selected repositories)', text)
+        self.assertIn('2/20 selected repos', text)
+        self.assertIn('partial coverage', text)
+
 
     def test_partial_calendar_dates_gaps_and_generic_plugin(self):
         plan = self.plan(card_width=1200, card_height=630)
@@ -354,12 +366,20 @@ class ModeExportPipelineTests(contracts._ContractFixtures):
             for output_format in ['json', 'svg', 'card', 'png']:
                 client = self.client()
                 path = Path(self.directory)/'mode.png'
-                arguments = ['--set', 'display.export_style=modern', '--visual-preset', 'compact', *command]
+                arguments = ['--set', 'display.export_style=modern', '--set', 'display.colors.heading=#123456',
+                             '--visual-preset', 'compact', *command]
                 if output_format == 'png':
                     arguments = ['--save', str(path), *arguments]
                 with mock.patch('gitfetch.modes.shutil', mock.Mock(
                         get_terminal_size=mock.Mock(side_effect=AssertionError('terminal query')))):
-                    self.run_cli(arguments, client, output_format=output_format)
+                    rendered = self.run_cli(arguments, client, output_format=output_format)
+                if output_format in {'card', 'svg'}:
+                    root = ET.fromstring(rendered)
+                    self.assertIn('#123456', {element.get('fill') for element in root.iter()})
+                    if output_format == 'card' and command[0] == 'repo':
+                        text = ' '.join(element.text or '' for element in root.iter(SVG+'text'))
+                        self.assertIn('stars:', text)
+                        self.assertIn('Languages', text)
                 counts.append({name: getattr(client, name).call_count for name in
                                ['get_repo', 'get_context', 'get_repo_languages', 'get_repo_contributors',
                                 'get_repo_commits', 'get_org', 'get_org_members', 'get_org_repos']})

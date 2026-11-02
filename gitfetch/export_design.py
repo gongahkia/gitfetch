@@ -132,9 +132,9 @@ def coverage_text(measurement) -> str:
 
 
 class _Builder:
-    def __init__(self, display: dict[str, Any], image: Image.Image | None) -> None:
+    def __init__(self, display: dict[str, Any], image: Image.Image | None, *, colors: dict[str, str] | None = None) -> None:
         self.width, self.height = dimensions(display)
-        self.colors = export_colors(display)
+        self.colors = export_colors(display) if colors is None else colors
         self.preset = display.get('visual_preset', 'balanced')
         if self.preset not in {'balanced', 'compact', 'showcase'}:
             raise ValueError('invalid visual preset')
@@ -237,26 +237,31 @@ def plan_profile_card(document: ProfileDocument, display: dict[str, Any], image:
     metadata = ' · '.join(v for v in (identity.location, identity.company, identity.website) if v) if identity else ''
     builder.header(name or 'Profile', handle, identity.biography or '' if identity else '', metadata)
     sections = [s for s in document.sections if not isinstance(s.content, ProfileIdentity)]
+    _flow_sections(builder, display, sections, _draw_section,
+                   first_wide=bool(sections and isinstance(sections[0].content, MetricGroup)))
+    builder.condensed |= len(sections) > 128
+    return builder.finish()
+
+
+def _flow_sections(builder, display, sections, draw, *, first_wide=False):
     columns = None
     use_columns = builder.width >= 600 and builder.height >= 300 and builder.preset != 'compact'
     for index, section in enumerate(sections[:128]):
-        if not use_columns or index == 0 and isinstance(section.content, MetricGroup):
-            _draw_section(builder, section, display)
+        if not use_columns or index == 0 and first_wide:
+            draw(builder, section, display)
             continue
         if columns is None:
             columns = [builder.y, builder.y]
         column = min(range(2), key=lambda c: columns[c])
         column_width = (builder.width-2*builder.pad-builder.gap)/2
-        local = _Builder({**display, 'card_width': int(column_width+2*builder.pad)}, None)
+        local = _Builder({**display, 'card_width': int(column_width+2*builder.pad)}, None, colors=builder.colors)
         local.pad, local.body, local.small = builder.pad, builder.body, builder.small
         local.y, local.bottom = columns[column], builder.bottom
-        _draw_section(local, section, display)
+        draw(local, section, display)
         offset = column*(column_width+builder.gap)
         builder.nodes.extend(replace(node, x=node.x+offset) for node in local.nodes)
         builder.condensed |= local.condensed
         columns[column] = local.y
-    builder.condensed |= len(sections) > 128
-    return builder.finish()
 
 
 def _draw_section(builder, section, display):
@@ -265,9 +270,17 @@ def _draw_section(builder, section, display):
         return
     content = section.content
     if isinstance(content, MetricGroup):
-        values = [f'{measurement_text(m.measurement)}' +
-                  (f' {m.measurement.unit}' if m.measurement.unit not in {'count', 'repositories'} else '') +
-                  ' ' + m.label.lower() for m in content.metrics]
+        values = []
+        for metric in content.metrics:
+            m = metric.measurement
+            label = metric.label.lower()
+            if section.name == 'stats':
+                if metric.identifier == 'public_repos' and m.scope not in {'', 'public owned repositories', 'public_repos'}:
+                    label = m.scope
+                elif metric.identifier not in {'public_repos', 'followers', 'following', 'public_gists'} and m.scope:
+                    label += ' (' + m.scope + ')'
+            unit = ' ' + m.unit if m.unit not in {'count', 'repositories'} else ''
+            values.append(measurement_text(m) + unit + ' ' + label)
         builder.line(section.title, 'heading')
         if builder.preset == 'compact':
             builder.paragraph(' · '.join(values), role='stat', limit=2)
@@ -282,9 +295,14 @@ def _draw_section(builder, section, display):
                 for j, value in enumerate(values[i:i+n]):
                     builder.text(value, role='stat', x=builder.pad+j*column, width=column-10)
                 builder.y += builder.body+6
+        notices = []
         for measurement in section.measurements.values():
             if measurement.start and measurement.end:
-                builder.line(f'Observed: {measurement.start} – {measurement.end} · {measurement.coverage}', 'muted', 10)
+                notices.append(f'Observed: {measurement.start} – {measurement.end} · {measurement.coverage}')
+            elif measurement.sample_size is not None:
+                notices.append(measurement.scope + ' · ' + coverage_text(measurement))
+        for notice in dict.fromkeys(notices):
+            builder.line(notice, 'muted', 10)
     elif isinstance(content, LanguageDistribution):
         m = content.measurement
         builder.line(('Language prevalence · repos' if 'prevalence' in m.scope else 'Primary languages · repos')
@@ -379,15 +397,18 @@ def plan_summary_card(title: str, subtitle: str, modules, display: dict[str, Any
     builder = _Builder(display, image)
     builder.header(title, subtitle)
     selected = [module for module in modules if not module.hidden]
-    for module in selected[:128]:
-        if builder.y+builder.body*2+12 > builder.bottom:
-            builder.condensed = True
-            break
-        builder.line(module.title, 'heading')
-        limit = 2 if builder.preset == 'compact' else 5 if builder.preset == 'showcase' else 3
-        for line in module.lines[:limit]:
-            builder.paragraph(line, limit=1)
-        builder.condensed |= len(module.lines) > limit
-        builder.y += builder.gap
+    _flow_sections(builder, display, selected, _draw_summary_section)
     builder.condensed |= len(selected) > 128
     return builder.finish()
+
+
+def _draw_summary_section(builder, module, display):
+    if builder.y+builder.body*2+12 > builder.bottom:
+        builder.condensed = True
+        return
+    builder.line(module.title, 'heading')
+    limit = 16 if display.get('details') else 2 if builder.preset == 'compact' else 5 if builder.preset == 'showcase' else 3
+    for line in module.lines[:limit]:
+        builder.paragraph(line, limit=1)
+    builder.condensed |= len(module.lines) > limit
+    builder.y += builder.gap

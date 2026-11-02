@@ -183,6 +183,21 @@ def _metric_text(value: Any) -> str:
     return "unavailable" if value is None else str(value)
 
 
+def _terminal_svg_design(config):
+    from gitfetch.export_design import export_colors
+    from gitfetch.formats import _legacy_export
+    forced = {**config, "_color_force": "on", "_export_viewport": True}
+    palette = palette_for(forced)
+    if not _legacy_export(config):
+        colors = export_colors(config["display"])
+        forced["display"] = {**config["display"],
+                             "svg_background": config["display"].get("svg_background", colors["background"]),
+                             "svg_foreground": config["display"].get("svg_foreground", colors["text"])}
+        palette = {**palette, "title": colors["heading"], "key": colors["heading"],
+                   "value": colors["text"], "dim": colors["muted"], "accent": colors["accent"]}
+    return forced, palette
+
+
 def _emit_mode_output(
     config: dict[str, Any],
     args: argparse.Namespace,
@@ -221,11 +236,10 @@ def _emit_mode_output(
     if output_format == "svg":
         from gitfetch.formats import render_terminal_svg
 
-        svg_config = {**config, "_color_force": "on", "_export_viewport": True}
-        palette = palette_for(svg_config)
+        svg_config, palette = _terminal_svg_design(config)
         text_lines = module_lines(visible_modules, color_enabled(svg_config, "ansi"), palette)
         terminal_text = _render_with_lines(svg_config, "ansi", avatar_url, text_lines)
-        _write_or_print(render_terminal_svg(terminal_text, config), args)
+        _write_or_print(render_terminal_svg(terminal_text, svg_config), args)
         return
 
     enabled_color = color_enabled(config, output_format)
@@ -516,6 +530,11 @@ def handle_compare_command(args: argparse.Namespace) -> int:
     enabled_color = color_enabled(config, output_format)
     palette = palette_for(config)
 
+    if output_format == "svg":
+        from gitfetch.formats import _legacy_export
+        _, palette = _terminal_svg_design(config)
+        enabled_color = not _legacy_export(config)
+
     columns: list[list[str]] = []
     avatars: list[list[str]] = []
     contexts = []
@@ -649,9 +668,9 @@ def handle_compare_command(args: argparse.Namespace) -> int:
     if output_format == "svg":
         from gitfetch.formats import render_terminal_svg
 
-        svg_config = {**config, "_color_force": "on", "_export_viewport": True}
-        svg_summary = module_lines([summary], color_enabled(svg_config, "ansi"), palette_for(svg_config))
-        _write_or_print(render_terminal_svg("\n".join(svg_summary + [""] + rows), config), args)
+        svg_config, svg_palette = _terminal_svg_design(config)
+        svg_summary = module_lines([summary], color_enabled(svg_config, "ansi"), svg_palette)
+        _write_or_print(render_terminal_svg("\n".join(svg_summary + [""] + rows), svg_config), args)
     else:
         _write_or_print(apply_margin(final_text, margin), args)
     return 0
