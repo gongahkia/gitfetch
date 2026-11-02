@@ -6,9 +6,9 @@ BBBBBBBBBBBBBBBBBBBBBBBB
 BBSSSSSSSSSBBBBBBBBBBBBB
 B&*%%*%%%*%#BBBBBBBBBBBB
 #*%%%%%%%%*%SBBBBBBBBBBB
-#*%%%%%%%%%%SBBBBBBBBBBB
+#%%%%%%%%%%%SBBBBBBBBBBB
 #*%%%%%%%%*%SBS@@&SBBBBB
-#%%%%%%%%%*%B@!!:!*SBBBB
+#*%%%%%%%%*%B@!!:!*SBBBB
 #*%%%%%%%%*%@!!!!!!*SBBB
 #*%%%%%%%*%%!!!!!!!:%BBB
 #*%%%%%%%%%*!!!!!!!!!SBB
@@ -17,7 +17,7 @@ B&*%%*%%%*%#BBBBBBBBBBBB
 #*%%%%%%%%*%@!!!!!!*SBBB
 #*%%%%%%%%*%B@!!:!*SBBBB
 #*%%%%%%%%*%SBS@@&SBBBBB
-#*%%%%%%%%%%SBBBBBBBBBBB
+#%%%%%%%%%%%SBBBBBBBBBBB
 #*%%%%%%%%*%SBBBBBBBBBBB
 B&*%%*%%%*%#BBBBBBBBBBBB
 BBSSSSSSSSSBBBBBBBBBBBBB

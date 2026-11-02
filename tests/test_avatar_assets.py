@@ -80,7 +80,7 @@ class PreparationTests(unittest.TestCase):
         self.assertTrue(transparent.has_transparency)
         self.assertFalse(transparent.has_partial_alpha)
         self.assertTrue(partial.has_partial_alpha)
-        self.assertIn(128, partial.image.getchannel("A").getdata())
+        self.assertIn(128, partial.image.getchannel("A").get_flattened_data())
         self.assertEqual(transparent.image.getpixel((0, 0))[3], 0)
 
     def test_large_but_allowed_image_is_prepared_at_bounded_size(self):

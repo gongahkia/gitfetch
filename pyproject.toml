@@ -7,14 +7,13 @@ name = "gitfetch"
 version = "2.0.0"
 description = "Neofetch-style CLI profiles for GitHub, GitLab, Bitbucket, Gitea, Forgejo and Codeberg"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = "MIT AND LicenseRef-DejaVu"
 license-files = ["LICENSE", "gitfetch/assets/fonts/LICENSE-DejaVu.txt", "gitfetch/assets/language-icons/LICENSE-devicon.txt"]
 dependencies = [
     "requests>=2.31.0,<3.0.0",
-    "Pillow>=10.0.0,<12.0.0",
+    "Pillow>=13.0.0,<14.0.0",
     "wcwidth>=0.9.3,<1.0.0",
-    "tomli>=2.0.1; python_version < '3.11'",
 ]
 
 [project.optional-dependencies]
@@ -24,11 +23,16 @@ dev = [
 ]
 
 [tool.ruff]
-target-version = "py310"
+target-version = "py311"
 line-length = 120
 
+[tool.ruff.lint]
+# Retain established datetime spellings; the support-floor change does not
+# require unrelated provider/date formatting edits. These are style rules.
+extend-ignore = ["UP017", "FURB162"]
+
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.11"
 ignore_missing_imports = true
 follow_imports = "skip"
 

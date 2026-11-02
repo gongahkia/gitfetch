@@ -56,7 +56,7 @@ Historical classic terminal example; modern presets and exported cards have diff
 ## Usage
 
 > [!WARNING]  
-> `Gitfetch` minimally requires Python 3.10+ to be installed, which can be downloaded [here](https://www.python.org/downloads/).  
+> `Gitfetch` requires Python 3.11+ and Pillow 13. Python 3.10 support ends in v3 so image handling can use patched Pillow releases. See the [migration guide](docs/MIGRATION-V3.md).
 
 The below instructions are for locally installing and running `Gitfetch`.
 

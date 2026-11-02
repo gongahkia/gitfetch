@@ -39,8 +39,8 @@ def _ensure_user_bin_on_path() -> None:
 
 
 def main() -> int:
-    if sys.version_info < (3, 10):  # noqa: UP036 - installer also runs before package version validation
-        print("Python 3.10+ is required", file=sys.stderr)
+    if sys.version_info < (3, 11):  # noqa: UP036 - installer also runs before package version validation
+        print("Python 3.11+ is required", file=sys.stderr)
         return 1
     system = platform.system()
     if system not in {"Darwin", "Linux"}:

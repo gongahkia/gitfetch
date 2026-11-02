@@ -340,8 +340,8 @@ def _render_ascii(img: Image.Image, width: int, aspect: float, color_mode: str, 
     chars = chars or list("BS#&@$%*!:.")
     target_h = max(1, int(aspect * width * 0.55))
     sampled = _avatar_samples(img, (width, target_h))
-    pixels = list(sampled.getdata())
-    gray = list(sampled.convert("L").getdata())
+    pixels = sampled.get_flattened_data()
+    gray = sampled.convert("L").get_flattened_data()
     lines = []
     for row in range(target_h):
         parts = []
@@ -362,7 +362,7 @@ def _render_ascii(img: Image.Image, width: int, aspect: float, color_mode: str, 
 
 def _render_halfblock(img: Image.Image, width: int, aspect: float, color_mode: str) -> list[str]:
     target_h = max(1, int(aspect * width * 0.5))
-    pixels = list(_avatar_samples(img, (width, target_h * 2)).getdata())
+    pixels = _avatar_samples(img, (width, target_h * 2)).get_flattened_data()
     lines = []
     for row in range(target_h):
         parts = []
@@ -399,8 +399,8 @@ def _render_braille(img: Image.Image, width: int, aspect: float, color_mode: str
     target_h = max(1, int(aspect * width * 0.5))
     pixel_w = width * 2
     sampled = _avatar_samples(img, (pixel_w, target_h * 4))
-    pixels = list(sampled.getdata())
-    gray = list(sampled.convert("L").getdata())
+    pixels = sampled.get_flattened_data()
+    gray = sampled.convert("L").get_flattened_data()
     lines = []
     for row in range(target_h):
         parts = []

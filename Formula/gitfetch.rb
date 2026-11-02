@@ -23,8 +23,8 @@ class Gitfetch < Formula
   end
 
   resource "pillow" do
-    url "https://files.pythonhosted.org/packages/source/p/pillow/pillow-11.3.0.tar.gz"
-    sha256 "3828ee7586cd0b2091b6209e5ad53e20d0649bbe87164a459d0676e035e8f523"
+    url "https://files.pythonhosted.org/packages/ce/a4/9cc30690a394a8305e8be4c9036aa16d0dfddadd09079860b582f562496d/pillow-13.0.0.tar.gz"
+    sha256 "cdcd1ba258178f7356d74170c9a81ba4eab6a5d55748bc402a5a2a6fe6be3510"
   end
 
   resource "requests" do

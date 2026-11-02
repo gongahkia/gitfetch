@@ -5,6 +5,22 @@ TOML configuration presets. The package/version strings remain 2.0.0 until the
 maintainer approves the release version; published 2.0 downloads are not the v3
 candidate.
 
+Gitfetch v3 requires **Python 3.11+** and **Pillow >=13.0.0,<14.0.0**.
+Python 3.10 support intentionally ends with this major release. Pillow 13 fixes
+CVE-2026-96643 (malicious PNG EXIF parsing can consume excessive CPU) and requires
+Python 3.11 or newer. Keeping an older Pillow for Python 3.10 would retain an
+unpatched image-processing path; there is no separate legacy dependency branch.
+The byte/pixel limits remain additional safeguards, not substitutes for patches.
+See the [upstream advisory](https://github.com/python-pillow/Pillow/security/advisories/GHSA-g4qv-2jxx-769h).
+
+Install Python 3.11 or newer before upgrading. Create a **new** virtual environment
+with that interpreter, install Gitfetch there, then validate your existing config.
+Changing the Python executable inside an old 3.10 environment is not an upgrade
+procedure. Package installers reject Python 3.10; the standalone installer reports
+the minimum version before invoking pip. Python 3.11's built-in TOML parser
+replaces the old conditional `tomli` dependency. Back up configuration as below;
+no config schema or profile migration is required for the interpreter change.
+
 Back up `~/.config/gitfetch/config.toml`, then install the local checkout into a
 new virtual environment and run `gitfetch config validate`. Existing explicit
 avatar styles are preserved; old style/ramp settings select text rendering.

@@ -331,7 +331,7 @@ class KittyEncodingTests(unittest.TestCase):
         with Image.open(BytesIO(self.payload(self.encode()))) as image:
             self.assertEqual(image.convert("RGBA").tobytes(), self.asset.image.tobytes())
             self.assertEqual(image.getpixel((0, 0))[3], 0)
-            self.assertIn(128, image.getchannel("A").getdata())
+            self.assertIn(128, image.getchannel("A").get_flattened_data())
 
     def test_non_square_tiny_oriented_and_animated_sources(self):
         for case in CASES:
