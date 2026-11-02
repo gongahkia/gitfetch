@@ -24,7 +24,7 @@ def main():
             image.thumbnail((420, 260))
             x, y = (index % 3)*440+10, (index//3)*300+30
             sheet.paste(image, (x, y))
-            draw.text((x, y-23), case, fill='white', font=font(14))
+            draw.text((x, y-23), f'{case} · {plan.width}×{plan.height}', fill='white', font=font(14))
     sheet.save(args.output / 'contact-sheet.png')
     print(f'Wrote {len(CASES)} SVG/PNG pairs and contact-sheet.png to {args.output}')
 

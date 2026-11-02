@@ -51,13 +51,21 @@ Their pixel geometry is deliberately different from a terminal screenshot.
 
 | Visual preset | Graphical interpretation |
 | --- | --- |
-| balanced | 88-pixel avatar slot at comfortable sizes, 25-pixel title, moderate gaps, primary metrics followed by adaptive two-column content |
-| compact | 64-pixel avatar slot, 21-pixel title, small gaps, packed metrics, two language entries and a dated activity summary |
-| showcase | 112-pixel avatar slot, 30-pixel title, more metadata, detailed charts and repository descriptions where space permits |
+| balanced | Responsive avatar slot up to 136 pixels, 25-pixel title, moderate gaps, primary metrics followed by adaptive two-column content |
+| compact | Responsive avatar slot up to 112 pixels, 21-pixel title, smaller type/gaps, packed metrics and space-aware columns, languages and charts |
+| showcase | Responsive avatar slot up to 168 pixels, 30-pixel title, greater avatar emphasis, detailed charts and repository descriptions where space permits |
 
-Smaller canvases use 56-pixel avatar slots and smaller type, or omit the avatar
+Smaller canvases bound avatar slots by available height and use smaller type, or omit the avatar
 when a readable header cannot share its row. All three presets use the same
 builder. Visual presets never enable modules or alter collection limits.
+
+Tranche 07.1 removes compact's fixed two-language/text-only-activity restrictions.
+All presets offer up to five selected language entries without `--details`,
+subject to actual line space. Dated contribution charts are eligible in every
+preset, including tall/narrow cards. A chart's explicit `Shown` interval describes
+its bounded display window; that alone no longer triggers an omission notice.
+Actual clipped or unallocated selected content still does. See
+[the polish report](export-visual-polish.md) for measured before/after results.
 
 The minimum identity header identifies the requested target. A selected identity
 section supplies display name, biography and metadata. If that section is
@@ -69,10 +77,10 @@ suppress unselected statistics and suppress unselected identity biographies.
 This intentionally corrects the old top-level-user-field resurrection behavior.
 
 The selected section sequence is consumed in caller order. At widths of at
-least 600 and heights of at least 300, balanced/showcase put the primary metric
+least 600 and heights of at least 300, all presets put the primary metric
 section across the card and allocate subsequent sections to the currently
 shorter of two lanes. Reading positions may therefore interleave later secondary
-sections; source/paint order remains the selected order. Compact and narrow
+sections; source/paint order remains the selected order. Narrow or short
 cards use a single lane. Branding and an omission-notice area are reserved.
 No decorative dashboard panels or ornamental borders were added.
 
@@ -94,6 +102,12 @@ Catppuccin Latte. The card has its own explicit theme-compatible background:
 Nord `#2e3440`, Dracula `#282a36`, Gruvbox `#282828`, Catppuccin variants' bases,
 Latte `#eff1f5`, and a dark `#0d1117` fallback for other themes. No wallpaper or
 terminal background is queried.
+
+Default modern cards now resolve export-specific semantic defaults: near-white
+identity/statistics, cool secondary text and restrained teal chart accents on
+`#141a23`. The terminal and terminal-SVG defaults remain unchanged. Other named
+themes retain their role mappings. Explicit semantic colors and legacy card
+palette overrides retain precedence; monochrome still suppresses custom colors.
 
 All existing theme names and T06A role names are retained: identity, handle,
 text, muted, heading, stat, accent, language, contribution, track, notice,

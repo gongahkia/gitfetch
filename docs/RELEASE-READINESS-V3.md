@@ -4,6 +4,12 @@ Assessment date: 2026-11-02. Scope: Tranche 07 integration, hardening and
 release readiness. No release, version change, commit, tag, push, deployment,
 credentialed integration run or Homebrew submission was performed.
 
+Subsequent acceptance: the maintainer reports Balanced, Compact and Showcase
+terminal presets visually accepted. The focused T07.1 export corrections and
+their evidence are recorded in [export visual polish](export-visual-polish.md).
+The release-coordinate blocker below remains unchanged; the gate table records
+the original T07 review rather than claiming new physical/platform testing.
+
 ## 1. Executive verdict
 
 **Engineering verification: PASS for the tested local implementation after

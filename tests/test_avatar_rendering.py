@@ -210,7 +210,9 @@ class AvatarExportTests(unittest.TestCase):
             with mock.patch("gitfetch.images.urlopen", return_value=response(image_bytes("transparent"))):
                 render_card_png(self.config, self.user, self.modules, path)
             with Image.open(path) as image:
-                self.assertEqual(image.getpixel((48, 48)), (13, 17, 23))
+                # Transparent padding reveals the intentionally refined modern
+                # card surface; it must never acquire an opaque black fill.
+                self.assertEqual(image.getpixel((48, 48)), (20, 26, 35))
 
     def test_invalid_asset_does_not_crash_terminal_or_exports(self):
         with tempfile.TemporaryDirectory() as directory, mock.patch("gitfetch.images.urlopen", return_value=response(b"invalid")) as http:

@@ -76,17 +76,26 @@ def dimensions(display: dict[str, Any]) -> tuple[int, int]:
     return width, height
 
 
-def export_colors(display: dict[str, Any]) -> dict[str, str]:
+def export_colors(display: dict[str, Any], *, card: bool = False) -> dict[str, str]:
     overrides = display.get('colors', {})
     validate_colors(overrides)
     theme = display.get('theme', 'default')
     light = theme == 'catppuccin-latte'
     foreground = '#303446' if light else '#e6edf3'
+    # Cards have a known surface. Keep terminal SVG's established palette while
+    # resolving a restrained default through the same semantic role system.
+    defaults = ({'identity': '#e6edf3', 'stat': '#e6edf3', 'heading': '#b3c7df',
+                 'handle': '#a5b4c6', 'muted': '#a5b4c6', 'accent': '#86b7ad',
+                 'notice': '#a5b4c6', 'warning': '#e0ba81'} if card and theme == 'default' else {})
+    if 'accent' in overrides:
+        defaults = {key: value for key, value in defaults.items() if key not in {'notice', 'warning'}}
     colors = {}
-    for role, color in resolve_colors(theme, overrides).items():
+    for role, color in resolve_colors(theme, {**defaults, **overrides}).items():
         colors[role] = ('#{:02x}{:02x}{:02x}'.format(*color.rgb) if color.rgb is not None else
                         SYSTEM_COLORS[color.terminal_index] if color.terminal_index is not None else foreground)
     colors['background'] = BACKGROUND.get(theme, '#0d1117')
+    if card and theme == 'default':
+        colors['background'] = '#141a23'
     colors['surface'] = '#dce0e8' if light else '#252d38'
     # Existing custom card surfaces/foreground remain usable. Semantic overrides
     # have priority over the corresponding old palette keys.
@@ -134,14 +143,14 @@ def coverage_text(measurement) -> str:
 class _Builder:
     def __init__(self, display: dict[str, Any], image: Image.Image | None, *, colors: dict[str, str] | None = None) -> None:
         self.width, self.height = dimensions(display)
-        self.colors = export_colors(display) if colors is None else colors
+        self.colors = export_colors(display, card=True) if colors is None else colors
         self.preset = display.get('visual_preset', 'balanced')
         if self.preset not in {'balanced', 'compact', 'showcase'}:
             raise ValueError('invalid visual preset')
         self.small = self.width < 500 or self.height < 240
-        self.pad = 16 if self.small or self.preset == 'compact' else 28
-        self.body = 11 if self.small else 13 if self.preset == 'compact' else 14
-        self.gap = 7 if self.preset == 'compact' else 12
+        self.pad = 16 if self.small or self.preset == 'compact' else 24 if self.height <= 360 else 28
+        self.body = 11 if self.small else 12 if self.preset == 'compact' else 13 if self.height <= 360 else 14
+        self.gap = 7 if self.preset == 'compact' else 10 if self.height <= 360 else 12
         self.bottom = self.height - self.pad - 24
         self.y = float(self.pad)
         self.nodes: list[Text | Rectangle | Picture] = []
@@ -180,7 +189,10 @@ class _Builder:
 
     def header(self, name, handle, biography='', metadata=''):
         start = self.y
-        avatar = 56 if self.small else 64 if self.preset == 'compact' else 112 if self.preset == 'showcase' else 88
+        preferred, maximum, fraction = {'balanced': (104, 136, .30), 'compact': (80, 112, .28),
+                                        'showcase': (120, 168, .32)}[self.preset]
+        width_fraction = .19 if self.preset == 'showcase' else .14 if self.preset == 'compact' else .15
+        avatar = min(maximum, max(preferred, int(self.width*width_fraction)), int(self.height*fraction))
         avatar = min(avatar, max(0, int(self.bottom - self.y - 30)))
         x = self.pad
         if self.image is not None and avatar >= 32 and self.width >= 300:
@@ -199,12 +211,12 @@ class _Builder:
             self.text(handle, role='handle', x=x, width=width)
             self.y += self.body + 6
         if biography and not self.small:
-            self.paragraph(biography, role='text', limit=1 if self.preset == 'compact' else 2,
+            self.paragraph(biography, role='text', limit=1 if self.height <= 360 or self.preset == 'compact' else 2,
                            x=x, width=width)
         elif biography:
             self.condensed = True
-        if metadata and self.preset == 'showcase' and not self.small:
-            self.paragraph(metadata, role='muted', limit=1, x=x, width=width)
+        if metadata and not self.small:
+            self.paragraph(metadata, role='muted', limit=1, x=x, width=width, size=max(10, self.body-1))
         elif metadata:
             self.condensed = True
         self.y = max(self.y, start+avatar) + self.gap
@@ -245,7 +257,7 @@ def plan_profile_card(document: ProfileDocument, display: dict[str, Any], image:
 
 def _flow_sections(builder, display, sections, draw, *, first_wide=False):
     columns = None
-    use_columns = builder.width >= 600 and builder.height >= 300 and builder.preset != 'compact'
+    use_columns = builder.width >= 600 and builder.height >= 300
     for index, section in enumerate(sections[:128]):
         if not use_columns or index == 0 and first_wide:
             draw(builder, section, display)
@@ -256,6 +268,7 @@ def _flow_sections(builder, display, sections, draw, *, first_wide=False):
         column_width = (builder.width-2*builder.pad-builder.gap)/2
         local = _Builder({**display, 'card_width': int(column_width+2*builder.pad)}, None, colors=builder.colors)
         local.pad, local.body, local.small = builder.pad, builder.body, builder.small
+        local.gap = builder.gap
         local.y, local.bottom = columns[column], builder.bottom
         draw(local, section, display)
         offset = column*(column_width+builder.gap)
@@ -265,10 +278,13 @@ def _flow_sections(builder, display, sections, draw, *, first_wide=False):
 
 
 def _draw_section(builder, section, display):
-    if builder.y + builder.body*2+14 > builder.bottom:
+    content = section.content
+    minimum = builder.body*2+14
+    if isinstance(content, LanguageDistribution) and content.selected and content.measurement.availability == 'available':
+        minimum = builder.body*2+28  # heading, coverage, at least one entry
+    if builder.y + minimum > builder.bottom:
         builder.condensed = True
         return
-    content = section.content
     if isinstance(content, MetricGroup):
         values = []
         for metric in content.metrics:
@@ -285,15 +301,21 @@ def _draw_section(builder, section, display):
         if builder.preset == 'compact':
             builder.paragraph(' · '.join(values), role='stat', limit=2)
         else:
-            # Fixed semantic columns with pixel-measured, clipped values.
-            n = 2 if builder.small else 3
+            # Use measured widths for a short group; equal cells otherwise
+            # waste a whole row when just one label is longer than the others.
+            available = builder.width-2*builder.pad
+            widths = [length(value, builder.body)+12 for value in values]
+            one_row = bool(values) and sum(widths) <= available
+            n = len(values) if one_row else (2 if builder.small else 3)
             column = (builder.width-2*builder.pad)/n
             for i in range(0, len(values), n):
                 if builder.y+builder.body+6 > builder.bottom:
                     builder.condensed = True
                     break
                 for j, value in enumerate(values[i:i+n]):
-                    builder.text(value, role='stat', x=builder.pad+j*column, width=column-10)
+                    x = builder.pad+sum(widths[:j]) if one_row else builder.pad+j*column
+                    width = widths[j]-10 if one_row else column-10
+                    builder.text(value, role='stat', x=x, width=width)
                 builder.y += builder.body+6
         notices = []
         for measurement in section.measurements.values():
@@ -311,9 +333,9 @@ def _draw_section(builder, section, display):
         if m.availability != 'available':
             builder.line(measurement_text(m), 'warning')
         else:
-            limit = min(256, len(content.selected)) if display.get('details') else 2 if builder.small or builder.preset == 'compact' else 5
+            limit = min(256, len(content.selected)) if display.get('details') else 5
             for entry in content.selected[:limit]:
-                if builder.y + builder.body+10 > builder.bottom:
+                if builder.y + builder.body+6 > builder.bottom:
                     builder.condensed = True
                     break
                 denominator = m.denominator
@@ -322,13 +344,19 @@ def _draw_section(builder, section, display):
                           f'{entry.value:g}/{denominator:g} repos' if m.unit == 'repositories' and ratio is not None else
                           f'{entry.value:g} {m.unit}')
                 builder.text(entry.language + '  ' + suffix, role='text', width=(builder.width-2*builder.pad)*0.60)
-                if ratio is not None and builder.width >= 300:
+                if ratio is not None and builder.width-2*builder.pad >= 220:
                     x = builder.pad + (builder.width-2*builder.pad)*0.63
                     w = (builder.width-2*builder.pad)*0.37
                     builder.nodes.append(Rectangle(x, builder.y+5, w, 5, builder.colors['surface'], 2))
                     if ratio > 0:
-                        builder.nodes.append(Rectangle(x, builder.y+5, min(1, max(0, ratio))*w, 5, builder.colors['language'], 2))
-                builder.y += builder.body+8
+                        fill_width = min(1, max(0, ratio))*w
+                        # Pillow 10 cannot round a five-pixel-high strip whose
+                        # width falls between its corner/interior pixel bounds.
+                        # Keep the exact proportion, using square tiny fills in
+                        # the shared scene so SVG and PNG make the same choice.
+                        builder.nodes.append(Rectangle(x, builder.y+5, fill_width, 5,
+                                                       builder.colors['language'], 2 if fill_width >= 6 else 0))
+                builder.y += builder.body+4
             builder.condensed |= len(content.selected) > limit
     elif isinstance(content, ContributionActivity):
         m = content.calendar_measurement if display.get('details') else content.measurement
@@ -337,15 +365,20 @@ def _draw_section(builder, section, display):
         builder.line(f'{measurement_text(m)} · {m.coverage} coverage', 'muted', 10)
         if m.start and m.end:
             builder.line(f'{m.start} – {m.end}', 'muted', 10)
-        if m.availability == 'available' and days and builder.preset != 'compact' and not builder.small:
-            shown = days[-min(42, max(7, (builder.width-2*builder.pad)//12)):]
-            first, last = shown[0].date, shown[-1].date
+        if m.availability == 'available' and days and builder.y+57 <= builder.bottom:
+            capacity = min(42, max(7, int((builder.width-2*builder.pad)//9)))
+            first, last = days[0].date, days[-1].date
             # Dated positions include unknown gaps; never infer zero activity.
             from datetime import timedelta
-            first = max(first, last-timedelta(days=41))
+            try:
+                first = date.fromisoformat(m.start) if m.start else first
+                last = date.fromisoformat(m.end) if m.end else last
+            except ValueError:
+                first, last = days[0].date, days[-1].date
+            first = max(min(first, last), last-timedelta(days=capacity-1))
             builder.line(f'Shown: {first} – {last}', 'muted', 10)
-            day_values = {day.date: day.count for day in shown}
-            peak = max((day.count or 0 for day in shown), default=0)
+            day_values = {day.date: day.count for day in days if first <= day.date <= last}
+            peak = max((value or 0 for value in day_values.values()), default=0)
             count = (last-first).days+1
             step = (builder.width-2*builder.pad)/count
             if builder.y+26 <= builder.bottom:
@@ -357,8 +390,7 @@ def _draw_section(builder, section, display):
                     if activity_count is None:
                         builder.nodes.append(Text(builder.pad+index*step, builder.y, '?', 9, builder.colors['warning'], step))
                 builder.y += 25
-                builder.line('? unknown · baseline zero · height relative to window peak', 'muted', 9)
-                builder.condensed |= len(days) > count
+                builder.line('? unknown · baseline zero · relative peak', 'muted', 9)
             else:
                 builder.condensed = True
         elif days:
