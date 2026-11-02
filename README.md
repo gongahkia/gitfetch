@@ -60,17 +60,19 @@ Historical classic terminal example; modern presets and exported cards have diff
 
 The below instructions are for locally installing and running `Gitfetch`.
 
-1. First run the below commands to install `Gitfetch` to your own machine.
+1. Install [uv](https://docs.astral.sh/uv/getting-started/installation/), then install `Gitfetch` from your reviewed checkout. uv manages an isolated tool environment; no virtualenv activation is needed.
 
 ```console
 $ git clone https://github.com/gongahkia/gitfetch
 $ cd gitfetch
-$ python3 -m venv .venv
-$ source .venv/bin/activate # Windows: .venv\Scripts\activate
-$ python -m pip install .
+$ uv tool install --python 3.12 .
 $ gitfetch config wizard # save your username once
-# Alternatively, inside the activated environment: ./installer/mainInstall.sh
 ```
+
+If `gitfetch` is not on your PATH, run `uv tool update-shell` and restart your shell.
+After updating the checkout, reinstall with `uv tool install --reinstall --python 3.12 .`.
+To install a supplied candidate wheel instead, use `uv tool install --python 3.12 /path/to/gitfetch-3.0.0rc1-py3-none-any.whl`.
+The existing pip-based installer scripts remain available for compatibility.
 
 2. Then use any of the below commands to render a profile.
 
@@ -314,7 +316,7 @@ $ gitfetch --set profile.token_command="security find-generic-password -a work -
 ### Situation 2: I want to uninstall `Gitfetch` 😔
 
 ```console
-$ pip uninstall gitfetch
+$ uv tool uninstall gitfetch
 ```
 
 If you installed via the installer script, also remove the `export PATH` line the installer added to your shell rc file (`~/.bashrc`, `~/.zshrc`, or `~/.config/fish/config.fish`).
