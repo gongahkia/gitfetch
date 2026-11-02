@@ -1,5 +1,10 @@
 # Gitfetch v3 — final engineering acceptance
 
+Current candidate preparation: T07.4 synchronizes the local checkout to
+**3.0.0rc1**. See [candidate verification](RELEASE-CANDIDATE-VERIFICATION-V3.md)
+for exact source/artifact provenance and current gates. Results below are
+historical tranche evidence; they do not describe a published 3.0.0 release.
+
 Assessment date: 2026-11-02. Scope: Tranche 07 integration, hardening and
 release readiness. No release, version change, commit, tag, push, deployment,
 credentialed integration run or Homebrew submission was performed.
@@ -196,8 +201,8 @@ Outside-checkout suite commands (absolute path is this machine's checkout):
 
 ```sh
 cd /tmp
-/tmp/gitfetch-07-wheel-env/bin/python -m unittest discover -s /Users/gabrielongtemasek/Desktop/personal/gitfetch/tests
-/tmp/gitfetch-07-sdist-env/bin/python -m unittest discover -s /Users/gabrielongtemasek/Desktop/personal/gitfetch/tests
+/tmp/gitfetch-07-wheel-env/bin/python -m unittest discover -s <checkout>/tests
+/tmp/gitfetch-07-sdist-env/bin/python -m unittest discover -s <checkout>/tests
 /tmp/gitfetch-07-wheel-env/bin/python /tmp/gitfetch-07-package-check.py
 /tmp/gitfetch-07-sdist-env/bin/python /tmp/gitfetch-07-package-check.py
 ```

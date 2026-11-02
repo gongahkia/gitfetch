@@ -248,8 +248,8 @@ Installed-distribution commands, run from `/tmp` after creating fresh wheel/sdis
 venvs and installing each corresponding artifact:
 
 ```sh
-/tmp/gitfetch-072-wheel-env/bin/python -m unittest discover -s /Users/gabrielongtemasek/Desktop/personal/gitfetch/tests
-/tmp/gitfetch-072-sdist-env/bin/python -m unittest discover -s /Users/gabrielongtemasek/Desktop/personal/gitfetch/tests
+/tmp/gitfetch-072-wheel-env/bin/python -m unittest discover -s <checkout>/tests
+/tmp/gitfetch-072-sdist-env/bin/python -m unittest discover -s <checkout>/tests
 /tmp/gitfetch-072-wheel-env/bin/python /tmp/gitfetch-072-inspect.py
 /tmp/gitfetch-072-sdist-env/bin/python /tmp/gitfetch-072-inspect.py
 uv pip check --python /tmp/gitfetch-072-wheel-env/bin/python

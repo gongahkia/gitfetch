@@ -22,6 +22,13 @@ the minimum version before invoking pip. Python 3.11's built-in TOML parser
 replaces the old conditional `tomli` dependency. Back up configuration as below;
 no config schema or profile migration is required for the interpreter change.
 
+The candidate also requires the security-verified network dependency floors:
+Requests >=2.34.2,<3, urllib3 >=2.8,<3, certifi >=2026.10.23, and idna >=3.20,<4.
+These packages were already in the dependency graph. Explicit minimums ensure an
+upgrade cannot retain the vulnerable versions permitted by the older ranges.
+Remove conflicting old constraints from your own environment rather than using
+`--no-deps` to bypass the candidate's requirements.
+
 Back up `~/.config/gitfetch/config.toml`, then install the local checkout into a
 new virtual environment and run `gitfetch config validate`. Existing explicit
 avatar styles are preserved; old style/ramp settings select text rendering.
@@ -33,6 +40,19 @@ Controls are independent: configuration presets select modules/settings;
 modern/classic select presentation; visual presets balanced/compact/showcase
 select appearance; split/stack controls composition; themes/custom colors control
 foreground colors. Named profiles and dotted overrides retain their precedence.
+
+The default `presentation="auto"` selects modern on an ANSI TTY and classic
+otherwise. Balanced is the default modern visual preset. Explicit `modern`
+also works with captured/plain output; explicit `classic` retains the legacy
+terminal layout. The following settings are independent of module presets:
+
+```toml
+[display]
+presentation = "auto"
+visual_preset = "balanced" # compact or showcase
+avatar_fit = "auto"
+export_avatar_fit = "original"
+```
 
 Modern `avatar_fit=auto` fits nonzero alpha bounds. Use `original` to preserve
 intentional whitespace. Classic keeps original fitting. Exports use their own

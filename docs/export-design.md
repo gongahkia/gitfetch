@@ -367,8 +367,8 @@ uv pip install --reinstall-package gitfetch --python /tmp/gitfetch-06b-wheel-310
 (cd /tmp && /tmp/gitfetch-06b-wheel-312/bin/gitfetch modules list)
 (cd /tmp && /tmp/gitfetch-06b-wheel-310/bin/gitfetch --help)
 (cd /tmp && /tmp/gitfetch-06b-wheel-310/bin/gitfetch modules list)
-(cd /tmp && /tmp/gitfetch-06b-wheel-312/bin/python -m unittest discover -s /Users/gabrielongtemasek/Desktop/personal/gitfetch/tests)
-(cd /tmp && /tmp/gitfetch-06b-wheel-310/bin/python -m unittest discover -s /Users/gabrielongtemasek/Desktop/personal/gitfetch/tests)
+(cd /tmp && /tmp/gitfetch-06b-wheel-312/bin/python -m unittest discover -s <checkout>/tests)
+(cd /tmp && /tmp/gitfetch-06b-wheel-310/bin/python -m unittest discover -s <checkout>/tests)
 uv pip check --python /tmp/gitfetch-06b-wheel-312/bin/python
 uv pip check --python /tmp/gitfetch-06b-wheel-310/bin/python
 ```

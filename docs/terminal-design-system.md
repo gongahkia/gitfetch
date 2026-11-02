@@ -201,8 +201,8 @@ uv pip install --python /tmp/gitfetch-06a-wheel-310/bin/python /tmp/gitfetch-06a
 # Run from /tmp to avoid importing the checkout:
 (cd /tmp && /tmp/gitfetch-06a-wheel-312/bin/gitfetch --help)
 (cd /tmp && /tmp/gitfetch-06a-wheel-310/bin/gitfetch modules list)
-(cd /tmp && /tmp/gitfetch-06a-wheel-312/bin/python -m unittest discover -s /Users/gabrielongtemasek/Desktop/personal/gitfetch/tests)
-(cd /tmp && /tmp/gitfetch-06a-wheel-310/bin/python -m unittest discover -s /Users/gabrielongtemasek/Desktop/personal/gitfetch/tests)
+(cd /tmp && /tmp/gitfetch-06a-wheel-312/bin/python -m unittest discover -s <checkout>/tests)
+(cd /tmp && /tmp/gitfetch-06a-wheel-310/bin/python -m unittest discover -s <checkout>/tests)
 git diff --check
 .venv/bin/python tests/benchmark_design.py
 ```

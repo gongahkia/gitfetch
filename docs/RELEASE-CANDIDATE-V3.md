@@ -1,5 +1,10 @@
 # Gitfetch 3.0.0 — release-candidate readiness
 
+Current local candidate: **3.0.0rc1**, assembled in T07.4 under explicit local
+version-change authorization. The [candidate verification report](RELEASE-CANDIDATE-VERIFICATION-V3.md)
+supersedes this earlier preparation snapshot. Historical commands/limitations
+below are retained; no publication or final release-tag action is implied.
+
 Assessment: 2026-11-02. **Preparation only.** All commit, tag, push, publication,
 version-edit and formula-edit commands below are future maintainer instructions,
 not actions executed by this assessment.
@@ -121,8 +126,8 @@ The installed environments were created with `uv venv`, then installed with
 pinned `Pillow==10.0.0` to exercise the declared lower bound. From `/tmp`:
 
 ```sh
-/tmp/gitfetch-rc-wheel-env/bin/python -m unittest discover -s /Users/gabrielongtemasek/Desktop/personal/gitfetch/tests
-/tmp/gitfetch-rc-sdist-env/bin/python -m unittest discover -s /Users/gabrielongtemasek/Desktop/personal/gitfetch/tests
+/tmp/gitfetch-rc-wheel-env/bin/python -m unittest discover -s <checkout>/tests
+/tmp/gitfetch-rc-sdist-env/bin/python -m unittest discover -s <checkout>/tests
 /tmp/gitfetch-rc-wheel-env/bin/python /tmp/gitfetch-rc-inspect.py
 /tmp/gitfetch-rc-sdist-env/bin/python /tmp/gitfetch-rc-inspect.py
 uv pip check --python /tmp/gitfetch-rc-wheel-env/bin/python

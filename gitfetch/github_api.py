@@ -19,6 +19,7 @@ from gitfetch.semantics import (
     repository_coverage,
 )
 
+
 def configure_http_retries(session: requests.Session) -> None:
     """Retry transient, idempotent GET failures and honor Retry-After."""
     retries = Retry(

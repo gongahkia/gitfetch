@@ -233,7 +233,7 @@ Outside-checkout installed verification:
 
 ```sh
 cd /tmp
-/tmp/gitfetch-071-wheel-env/bin/python -m unittest discover -s /Users/gabrielongtemasek/Desktop/personal/gitfetch/tests
+/tmp/gitfetch-071-wheel-env/bin/python -m unittest discover -s <checkout>/tests
 /tmp/gitfetch-071-wheel-env/bin/python -m gitfetch.main --help
 /tmp/gitfetch-071-wheel-env/bin/gitfetch --version
 ```
