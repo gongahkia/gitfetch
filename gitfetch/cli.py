@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from dataclasses import asdict
 from pathlib import Path
@@ -218,7 +219,7 @@ def handle_config_command(args: argparse.Namespace) -> int:
     if args.config_command == "wizard":
         if path.exists() and not args.force:
             raise ConfigError(f"{path} already exists (use --force to overwrite)")
-        config = run_config_wizard()
+        config = run_config_wizard(color=getattr(args, "color", None))
         write_config(path, config)
         print(f"wrote {path}")
         return 0
@@ -227,20 +228,37 @@ def handle_config_command(args: argparse.Namespace) -> int:
     raise ConfigError("unknown config command")
 
 
-def run_config_wizard() -> dict:
-    provider = input(f"Provider [{'/'.join(SUPPORTED_PROVIDERS)}] (github): ").strip().lower() or "github"
+WIZARD_BANNER = (
+    "▄▀▀▀ ▀ ▄█▄   ▄▀▀  ▄▄  ▄█▄   ▄▄▄ █▄▄\n"
+    "█ ▀█ █  █   ▀█▀  █▀▀▀  █   █    █  █\n"
+    " ▀▀▀ ▀   ▀▀  ▀    ▀▀▀   ▀▀  ▀▀▀ ▀  ▀"
+)
+
+
+def run_config_wizard(*, color: bool | None = None) -> dict:
+    interactive = sys.stdout.isatty() and sys.stdin.isatty() and os.environ.get("TERM") != "dumb"
+    colored = interactive and color is not False and (color is True or "NO_COLOR" not in os.environ)
+    if interactive:
+        print("\033[2J\033[H", end="")
+    print(f"\033[1;36m{WIZARD_BANNER}\033[0m" if colored else WIZARD_BANNER)
+    print("\nLet's set up your Gitfetch profile.\n")
+
+    def ask(prompt: str) -> str:
+        return input(f"\033[36m{prompt}\033[0m" if colored else prompt)
+
+    provider = ask(f"Provider [{'/'.join(SUPPORTED_PROVIDERS)}] (github): ").strip().lower() or "github"
     if provider not in SUPPORTED_PROVIDERS:
         raise ConfigError(f"unknown provider: {provider}")
-    username = input("Username/workspace: ").strip()
-    preset = input("Preset [compact/minimal/full/showcase] (compact): ").strip() or "compact"
+    username = ask("Username/workspace: ").strip()
+    preset = ask("Preset [compact/minimal/full/showcase] (compact): ").strip() or "compact"
     if preset not in {"minimal", "compact", "full", "showcase"}:
         raise ConfigError(f"unknown preset: {preset}")
-    avatar_raw = input("Show avatar? [Y/n]: ").strip().lower()
-    output_format = input("Default format [ansi/plain/json/svg/card] (ansi): ").strip() or "ansi"
+    avatar_raw = ask("Show avatar? [Y/n]: ").strip().lower()
+    output_format = ask("Default format [ansi/plain/json/svg/card] (ansi): ").strip() or "ansi"
     if output_format not in {"ansi", "plain", "json", "svg", "card"}:
         raise ConfigError(f"unsupported format: {output_format}")
     default_token_env = PROVIDER_TOKEN_ENVS.get(provider, "GITHUB_TOKEN")
-    token_env = input(f"Token env var ({default_token_env}): ").strip() or default_token_env
+    token_env = ask(f"Token env var ({default_token_env}): ").strip() or default_token_env
     config = preset_config(preset)
     config["profile"]["provider"] = provider
     config["profile"]["username"] = username
