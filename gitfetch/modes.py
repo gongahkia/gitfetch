@@ -88,6 +88,8 @@ def _load_config_with_path(args: argparse.Namespace) -> dict[str, Any]:
     config = load_config(path)
     apply_named_profile(config, getattr(args, "profile", None))
     _apply_common_overrides(args, config)
+    if config["display"].get("format") == "png" and not getattr(args, "save", None):
+        raise ConfigError("--save is required for --format png")
     load_plugin_modules(config)
     return config
 

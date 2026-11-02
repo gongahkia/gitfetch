@@ -1,14 +1,15 @@
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["setuptools>=77.0.3"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "gitfetch"
 version = "2.0.0"
-description = "Configurable GitHub profile fetch for the terminal"
+description = "Neofetch-style CLI profiles for GitHub, GitLab, Bitbucket, Gitea, Forgejo and Codeberg"
 readme = "README.md"
 requires-python = ">=3.10"
-license = { file = "LICENSE" }
+license = "MIT AND LicenseRef-DejaVu"
+license-files = ["LICENSE", "gitfetch/assets/fonts/LICENSE-DejaVu.txt", "gitfetch/assets/language-icons/LICENSE-devicon.txt"]
 dependencies = [
     "requests>=2.31.0,<3.0.0",
     "Pillow>=10.0.0,<12.0.0",

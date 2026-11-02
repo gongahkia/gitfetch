@@ -183,6 +183,16 @@ def main(argv: list[str] | None = None) -> int:
     except requests.RequestException as exc:
         print(sanitize_text(f"network error: {exc}"), file=sys.stderr)
         return 1
+    except UnicodeEncodeError:
+        print("output encoding error: use a UTF-8 terminal or --save", file=sys.stderr)
+        return 1
+    except OSError as exc:
+        print(sanitize_text(f"filesystem error: {exc}"), file=sys.stderr)
+        return 1
+    except EOFError:
+        print("config error: configuration wizard input ended early", file=sys.stderr)
+        return 2
+
 
 
 def handle_config_command(args: argparse.Namespace) -> int:
@@ -450,6 +460,8 @@ def handle_render_command(args: argparse.Namespace) -> int:
     preferences = resolve_preferences(config, saved=saved_display, overrides=args.set,
                                       renderer=args.avatar_renderer, style=args.avatar_style)
     selected_format = args.format or config["display"].get("format", "ansi")
+    if selected_format == "png" and not args.save and not args.graphics_info:
+        raise ConfigError("--save is required for --format png")
     headless_export = selected_format in {"svg", "card", "png"} and not args.graphics_info
     capabilities = (classify_terminal({}, stdout_tty=False, writable=True) if headless_export
                     else discover_terminal(sys.stdout, sys.stdin))

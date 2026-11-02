@@ -1,5 +1,6 @@
 import hashlib
 import json
+import math
 import os
 import tempfile
 import time
@@ -34,9 +35,19 @@ class CacheStore:
             return None
         try:
             payload = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
+        except (OSError, ValueError):
             return None
-        if not allow_expired and payload.get("expires_at", 0) < time.time():
+        if not isinstance(payload, dict):
+            return None
+        expiration = payload.get("expires_at")
+        if isinstance(expiration, bool) or not isinstance(expiration, (int, float)):
+            return None
+        try:
+            if not math.isfinite(expiration):
+                return None
+        except OverflowError:
+            return None
+        if not allow_expired and expiration < time.time():
             return None
         return payload.get("value")
 

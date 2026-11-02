@@ -32,6 +32,15 @@ def load_plugin_modules(config: dict[str, Any]) -> None:
     reset_plugin_modules()
     plugins = config.get("plugins", {}) or {}
     paths = plugins.get("paths", []) or []
+    if "modules" in plugins:
+        settings = config.get("modules", {})
+        requested = set(plugins["modules"] or []) | {
+            name for name in settings.get("order", [])
+            if name not in _BUILTIN_MODULE_NAMES and settings.get(name, {}).get("enabled", False)
+        }
+        if not any(settings.get(name, {}).get("enabled", True) for name in requested):
+            return
+
     if paths and not plugins.get("allow_unsafe", False):
         raise ConfigError("local plugins execute arbitrary code; set plugins.allow_unsafe=true to enable them")
     loaded_paths: set[Path] = set()
@@ -64,7 +73,10 @@ def _load_module_from_path(path: Path) -> ModuleType:
 
 def _register_from_module(module: ModuleType, path: Path) -> None:
     if hasattr(module, "register"):
-        registry = module.register()
+        try:
+            registry = module.register()
+        except Exception as exc:
+            raise ConfigError(f"plugin {path} registration failed") from exc
     else:
         registry = getattr(module, "MODULES", None)
     if not isinstance(registry, dict):

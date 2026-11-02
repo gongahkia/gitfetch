@@ -329,3 +329,103 @@ on the now-fixed resurrection of disabled statistics. No test was deleted.
 During implementation HEAD advanced concurrently to `1f4c4c4475fb4203a7cbe2663e74f7453fcdf714`.
 That commit was preserved; the assistant did not commit, rebase, amend or reset.
 The final working tree includes subsequent focused export corrections.
+
+## Packaging and installation verification
+
+Final wheel and sdist contents were compared with the checkout for all new
+export modules and their integration adapters. The font and its full license
+are present in both archives; existing language-icon resources remain present.
+The font SHA-256 is
+`3fdf69cabf06049ea70a00b5919340e2ce1e6d02b0cc3c4b44fb6801bd1e0d22`.
+The SVG embeds the same font bytes and includes the redistribution notice in
+static metadata. No font software is fetched when an exported file is viewed.
+
+Installed-package verification uses isolated environments and runs outside the
+checkout. Exact commands (wheel filenames retain the existing package version;
+this tranche does not bump a release version):
+
+```sh
+uv venv --python 3.12 /tmp/gitfetch-06b-wheel-312
+uv pip install --reinstall-package gitfetch --python /tmp/gitfetch-06b-wheel-312/bin/python /tmp/gitfetch-06b-dist/gitfetch-2.0.0-py3-none-any.whl
+uv venv --python 3.10 /tmp/gitfetch-06b-wheel-310
+uv pip install --reinstall-package gitfetch --python /tmp/gitfetch-06b-wheel-310/bin/python /tmp/gitfetch-06b-dist/gitfetch-2.0.0-py3-none-any.whl 'Pillow==10.0.0'
+(cd /tmp && /tmp/gitfetch-06b-wheel-312/bin/gitfetch --help)
+(cd /tmp && /tmp/gitfetch-06b-wheel-312/bin/gitfetch modules list)
+(cd /tmp && /tmp/gitfetch-06b-wheel-310/bin/gitfetch --help)
+(cd /tmp && /tmp/gitfetch-06b-wheel-310/bin/gitfetch modules list)
+(cd /tmp && /tmp/gitfetch-06b-wheel-312/bin/python -m unittest discover -s /Users/gabrielongtemasek/Desktop/personal/gitfetch/tests)
+(cd /tmp && /tmp/gitfetch-06b-wheel-310/bin/python -m unittest discover -s /Users/gabrielongtemasek/Desktop/personal/gitfetch/tests)
+uv pip check --python /tmp/gitfetch-06b-wheel-312/bin/python
+uv pip check --python /tmp/gitfetch-06b-wheel-310/bin/python
+```
+
+T06B changed `gitfetch/{cli,config,formats,modes,render}.py`, `pyproject.toml`,
+and `tests/{test_modern_render,test_render,test_semantics}.py`.
+New files are `gitfetch/{export_design,export_fonts,export_paint,terminal_svg}.py`,
+`gitfetch/assets/fonts/{DejaVuSans.ttf,LICENSE-DejaVu.txt}`,
+`tests/{export_fixtures,preview_exports,benchmark_exports,test_export_design}.py`,
+and this document. Preexisting T06A changes are not attributed to T06B here.
+
+A second concurrent commit advanced HEAD to
+`e53049876b1acdfb8c4d90772748c467903ec493`; it was also preserved. These history
+updates were not performed by the assistant. No release integration was begun.
+
+## Final verification results
+
+**PASS — implementation and automated verification.** Cross-viewer SVG font
+appearance and physical terminal acceptance are **NOT VERIFIED** by these checks.
+The generated PNG contact sheet was visually inspected; all fourteen SVG files
+were XML-parsed and checked for unsafe elements/attributes and external images,
+and each corresponding PNG's dimensions were validated.
+
+| Environment/check | Result |
+| --- | --- |
+| Python 3.12.14 + Pillow 11.3.0, checkout | 601 discovered, 595 passed, 6 skipped |
+| Python 3.10.21 + Pillow 11.3.0, checkout | 601 discovered, 595 passed, 6 skipped |
+| Python 3.10.21 + Pillow 10.0.0, checkout | 601 discovered, 595 passed, 6 skipped |
+| Python 3.12.14 + Pillow 10.4.0, checkout | 601 discovered, 595 passed, 6 skipped |
+| Python 3.12.14 + Pillow 11.3.0, installed wheel outside checkout | Same 601/595/6 |
+| Python 3.10.21 + Pillow 10.0.0, installed wheel outside checkout | Same 601/595/6 |
+| Ruff | PASS |
+| mypy | PASS, 29 runtime files |
+| Python 3.10/3.12 compilation | PASS |
+| Wheel and sdist builds, code/resource byte comparisons | PASS |
+| Installed CLI help/modules and dependency checks, both environments | PASS |
+| `git diff --check`, README parity | PASS |
+| Existing ANSI/plain/JSON and explicit legacy compatibility | PASS |
+| Provider counts, module execution, document construction, offline acquisition | PASS |
+| Font/glyph/star regression, measured bounds, SVG/PNG semantic parity | PASS |
+
+The six skips are the existing opt-in live/integration tests; none were enabled.
+The preexisting missing top-level LICENSE and deprecated license-table build
+warnings remain outside this tranche. No broad packaging overhaul was performed.
+
+Final CPU-only timing sample, median of three batches of ten at 960×540, with
+semantic data and avatar already in memory and cached font faces. SVG timing
+includes serialization/inline PNG encoding, PNG timing includes raster drawing
+and PNG encoding to memory. Provider requests, network, disk writes and physical
+terminal output are excluded. These are host-dependent samples, not end-to-end
+latency guarantees or a claimed speedup.
+
+| Visual preset | Shared planning | SVG serialization | PNG painting/encoding |
+| --- | ---: | ---: | ---: |
+| balanced | 44.998 ms | 3.623 ms | 74.610 ms |
+| compact | 46.951 ms | 3.132 ms | 64.665 ms |
+| showcase | 46.124 ms | 3.592 ms | 77.280 ms |
+
+Synthetic avatar preparation measured 0.291 ms, memo reuse 0.006492 ms, and one
+representative cached-face text measurement 0.454 ms. The benchmark script and
+raw output are `tests/benchmark_exports.py` and `/tmp/gitfetch-06b-benchmark.log`.
+
+Final previews are in `/tmp/gitfetch-06b-previews/`, including
+`contact-sheet.png`, `balanced.{svg,png}`, `compact.{svg,png}`,
+`showcase.{svg,png}`, `repository.{svg,png}`, `organization.{svg,png}` and
+`comparison.{svg,png}`. Regenerate using the documented command.
+
+Remaining limitations are explicit: incomplete CJK/emoji glyph coverage,
+viewer-dependent SVG font embedding/fallback and antialiasing, the retained
+legacy fixed-coordinate artwork on small canvases, fixed-size-card condensation,
+and larger self-contained SVGs due to font embedding. None requires provider
+refactoring or a graphics protocol change. The implementation is ready for final
+release acceptance review, including manual SVG-viewer/visual checks; no release
+integration, tagging, publishing or release was started by the assistant.

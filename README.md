@@ -1,10 +1,8 @@
-[![](https://img.shields.io/badge/gitfetch_1.0-passing-light_green)](https://github.com/gongahkia/gitfetch/releases/tag/1.0)
-[![](https://img.shields.io/badge/gitfetch_2.0-passing-green)](https://github.com/gongahkia/gitfetch/releases/tag/2.0)
-![](https://github.com/gongahkia/gitfetch/actions/workflows/tests.yml/badge.svg)
-
 # `Gitfetch` 🛻
 
-Serving you snapshots of your [Git Provider](https://git-scm.com/) profile in the [CLI](https://en.wikipedia.org/wiki/Command-line_interface) at [blazingly fast](https://news.ycombinator.com/item?id=23874245) speeds.
+Neofetch for Git hosting profiles: a fast, non-interactive CLI with responsive terminal output and shareable SVG/PNG cards.
+
+This checkout contains v3 development work. Published 2.0 artifacts and the current Homebrew formula do not yet contain every feature described below; the release version has not been changed.
 
 ## Stack
 
@@ -12,6 +10,8 @@ Serving you snapshots of your [Git Provider](https://git-scm.com/) profile in th
 * *API*: [GitHub Rest API](https://docs.github.com/en/rest?apiVersion=2022-11-28), [GitLab REST API](https://docs.gitlab.com/api/rest/), [Bitbucket Cloud REST API](https://developer.atlassian.com/cloud/bitbucket/rest/), [Gitea REST API](https://docs.gitea.com/api/), [Forgejo API](https://forgejo.org/docs/latest/user/api-usage/)
 
 ## Screenshots
+
+Historical classic terminal example; modern presets and exported cards have different layouts.
 
 <div align="center">
     <img src="assets/gitfetch.png" width="90%">
@@ -35,7 +35,7 @@ Serving you snapshots of your [Git Provider](https://git-scm.com/) profile in th
     * Public repos
     * Followers
     * Days since last commit
-    * Top-5 language breakdown by repository bytes 
+    * Languages with provider-specific units: bytes, repository prevalence, or primary-language repository counts
     * Contribution
     * Repository mode with provider-available repository stats, language data, contributors, and recent commits
     * Organization mode with organization stats, repositories, and public members heatmap (last 12 weeks, requires `--token`)
@@ -63,10 +63,13 @@ The below instructions are for locally installing and running `Gitfetch`.
 1. First run the below commands to install `Gitfetch` to your own machine.
 
 ```console
-$ pip install git+https://github.com/gongahkia/gitfetch.git # use pip for a one-line install
-$ git clone https://github.com/gongahkia/gitfetch # alternatively use the shell installer
-$ cd gitfetch/installer
-$ ./mainInstall.sh
+$ git clone https://github.com/gongahkia/gitfetch
+$ cd gitfetch
+$ python3 -m venv .venv
+$ source .venv/bin/activate # Windows: .venv\Scripts\activate
+$ python -m pip install .
+$ gitfetch config wizard # save your username once
+# Alternatively, inside the activated environment: ./installer/mainInstall.sh
 ```
 
 2. Then use any of the below commands to render a profile.
@@ -128,6 +131,54 @@ $ gitfetch token store --service gitfetch --account work
 $ gitfetch token status --service gitfetch --account work
 $ gitfetch --set profile.token_command="security find-generic-password -a work -s gitfetch -w" --profile work
 ```
+
+## Appearance and exports
+
+Configuration presets (`config init --preset minimal|compact|full|showcase`) select
+modules and settings. Visual presets only change how selected data appears:
+
+```sh
+gitfetch --presentation modern --visual-preset balanced
+gitfetch --user octocat --presentation modern --visual-preset compact --theme nord
+gitfetch --presentation modern --visual-preset showcase --details
+gitfetch --avatar-renderer text --avatar-style halfblock
+gitfetch --set display.avatar_fit=original
+```
+
+Modern presentation automatically fits visible avatar alpha; classic preserves
+the source canvas. Kitty graphics are selected conservatively on supported direct
+Ghostty/Kitty terminals. Unknown terminals, pipes, SSH, tmux and unverified Zellij
+paths use safe text fallbacks. No full-screen UI or active terminal probe is used.
+Windows uses text fallback. Physical support depends on the effective terminal.
+
+```toml
+[display]
+visual_preset = "showcase"
+layout = "split" # or stack
+theme = "catppuccin-mocha"
+[display.colors]
+identity = "#cba6f7"
+accent = "#89b4fa"
+```
+
+```sh
+gitfetch --presentation modern --visual-preset showcase --format svg --save terminal.svg
+gitfetch --format card --save profile.svg
+gitfetch --visual-preset compact --theme nord --format png --save profile.png
+gitfetch --set display.export_style=legacy --format card --save legacy.svg
+```
+
+`svg` is terminal-style output; `card` and `png` share a graphical layout.
+Exports preserve the original avatar canvas by default; opt in with
+`--set display.export_avatar_fit=visible`. Card dimensions use
+`display.card_width`/`display.card_height`, bounded to eight million pixels.
+`--details` expands already-selected data; fixed-size cards may still omit content
+with a notice. Custom colors require six-digit hexadecimal values. Use
+`--no-color` for terminal text or `--theme mono` for a monochrome card palette
+(avatars retain their source colors).
+Bundled fonts avoid optional system-font dependencies; some CJK/emoji glyphs may
+appear as boxes. See [migration notes](docs/MIGRATION-V3.md) and
+[export behavior](docs/export-design.md) for compatibility details.
 
 ## Modules
 
@@ -268,29 +319,11 @@ $ pip uninstall gitfetch
 
 If you installed via the installer script, also remove the `export PATH` line the installer added to your shell rc file (`~/.bashrc`, `~/.zshrc`, or `~/.config/fish/config.fish`).
 
-### Situation 3: `ls`, `sudo` and other terminal commands suddenly don't work 😭
+### Situation 3: Shell PATH problems
 
-> *This might seem daunting, but I believe in you. You got this.*
-
-**Step 1:**  
-```console
-$ cd ~ && ls -a
-```
-
-**Step 2:**  
-Check to ensure that the file titled `.bashrc` shows up.
-
-**Step 3:**  
-Use your favourite text editor to insert the line `export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games"` at the **top** of your `.bashrc` file.
-
-**Step 4:**
-```console
-$ nvim .bashrc
-$ cat .bashrc
-```
-
-**Step 5:**
-Check to ensure that the line has been added. End your terminal session and start a new one to reload `.bashrc` file.
+Reactivate your virtual environment and inspect your shell startup file for old
+installer PATH lines. Remove duplicate or incorrect entries; do not replace your
+entire PATH. The current installer leaves shell files untouched in a virtualenv.
 
 ### Situation 4: I typed the wrong username and want to change it 🤡
 

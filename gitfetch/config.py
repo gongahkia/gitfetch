@@ -427,7 +427,9 @@ def migrate_legacy_username() -> str | None:
         return None
     try:
         payload = json.loads(legacy.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+    except (OSError, ValueError):
+        return None
+    if not isinstance(payload, dict):
         return None
     username = payload.get("username")
     if isinstance(username, str) and username.strip():
@@ -441,7 +443,7 @@ def load_config(path: Path | None = None, *, explicit_display: set[str] | None =
     if target.exists():
         try:
             parsed = tomllib.loads(target.read_text(encoding="utf-8"))
-        except (OSError, tomllib.TOMLDecodeError) as exc:
+        except (OSError, UnicodeError, tomllib.TOMLDecodeError) as exc:
             raise ConfigError(f"invalid config at {target}: {exc}") from exc
         _merge(data, parsed)
         display = parsed.get("display", {})
@@ -610,8 +612,8 @@ def get_token(cli_token: str | None, config: dict[str, Any]) -> str:
     default_env = PROVIDER_TOKEN_ENVS.get(provider)
     if default_env:
         env_names.append(default_env)
-    if profile_env:
-        env_names.append(profile_env)
+    # Never send the implicit GitHub token to another hosting service. Explicit
+    # provider token_env overrides and custom profile variable names still work.
     for env_name in dict.fromkeys(env_names):
         env_token = os.environ.get(env_name, "")
         if env_token:
