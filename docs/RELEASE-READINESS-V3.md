@@ -4,6 +4,25 @@ Assessment date: 2026-11-02. Scope: Tranche 07 integration, hardening and
 release readiness. No release, version change, commit, tag, push, deployment,
 credentialed integration run or Homebrew submission was performed.
 
+T07.3 security update (2026-11-02): the Homebrew dependency blocker found in the
+release-candidate audit is resolved in the intended resource set. All 16 records
+(nine distinct advisories) are accounted for; certifi, idna, Requests and urllib3
+now use verified patched sources. Fresh exact-pin and installed-environment
+audits report zero known third-party advisories. Python 3.11/3.12/3.14 installed
+wheel suites and the installed-sdist suite each discover 623 tests: 617 passed,
+6 skipped. See [Homebrew security evidence](HOMEBREW-SECURITY-V3.md) for source
+checksums, raw audits, installation evidence and limitations. The current
+formula also declares Pillow's required native libraries and isolates its
+virtualenv from global Python packages. A disposable Linux Homebrew source
+installation, formula codec/font tests, dependency check and installed full
+suite pass (623 discovered, 617 passed, 6 skipped). macOS installation and the
+future release archive are not verified by that container check. The current
+Python >=3.11 / Pillow >=13,<14 policy is recorded in
+[T07.2 remediation](pillow-security-remediation.md). Overall public release
+readiness remains **NOT READY**: version/final-artifact coordination and the
+remaining environment-specific acceptance gates are unchanged. Historical
+tranche results below are retained rather than presented as new verification.
+
 Subsequent acceptance: the maintainer reports Balanced, Compact and Showcase
 terminal presets visually accepted. The focused T07.1 export corrections and
 their evidence are recorded in [export visual polish](export-visual-polish.md).

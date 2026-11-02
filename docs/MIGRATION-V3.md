@@ -1,9 +1,10 @@
 # Migrating a Gitfetch 2.x configuration
 
-The v3 development checkout retains existing command names, saved profiles and
-TOML configuration presets. The package/version strings remain 2.0.0 until the
-maintainer approves the release version; published 2.0 downloads are not the v3
-candidate.
+The local **3.0.0rc1** candidate retains existing command names, saved profiles
+and TOML configuration presets. It targets the eventual 3.0.0 release but is not
+published. Published 2.0 downloads and the production Homebrew formula are not
+the candidate. Use the exact local artifacts and hashes in the
+[candidate verification report](RELEASE-CANDIDATE-VERIFICATION-V3.md).
 
 Gitfetch v3 requires **Python 3.11+** and **Pillow >=13.0.0,<14.0.0**.
 Python 3.10 support intentionally ends with this major release. Pillow 13 fixes
@@ -59,8 +60,8 @@ Intentional compatibility changes:
   do not modify shell startup files. Remove only obsolete installer PATH lines;
   do not replace the entire PATH.
 
-Before publication the maintainer must choose the version, update release
-references and the Homebrew source URL/checksum to that actual artifact, and
+Before publication the maintainer must approve the final 3.0.0 version, update
+release references and the Homebrew source URL/checksum to that actual artifact, and
 review terminal/browser/platform acceptance. See `RELEASE-READINESS-V3.md`.
 
 Security correction: selecting a non-GitHub provider no longer implicitly falls

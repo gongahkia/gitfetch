@@ -2,7 +2,7 @@
 
 Neofetch for Git hosting profiles: a fast, non-interactive CLI with responsive terminal output and shareable SVG/PNG cards.
 
-This checkout contains v3 development work. Published 2.0 artifacts and the current Homebrew formula do not yet contain every feature described below; the release version has not been changed.
+This checkout is the local **3.0.0rc1** candidate for review. It has not been published. Published 2.0 downloads and the production Homebrew formula still refer to the previous release. Install the candidate wheel or source snapshot supplied with the [candidate verification report](docs/RELEASE-CANDIDATE-VERIFICATION-V3.md); cloning the remote is only equivalent after its source is synchronized.
 
 ## Stack
 

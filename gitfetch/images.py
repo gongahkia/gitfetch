@@ -24,6 +24,7 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from PIL import Image, ImageOps
 
+from gitfetch import USER_AGENT
 from gitfetch.avatar_cache import AvatarCache
 from gitfetch.cache import CacheStore
 
@@ -129,7 +130,7 @@ def _download(url: str) -> bytes:
     for redirects in range(MAX_AVATAR_REDIRECTS + 1):
         if not _valid_url(url):
             raise ValueError("unsupported avatar source")
-        request = Request(url, headers={"User-Agent": "gitfetch/2.0.0", "Accept-Encoding": "identity"})
+        request = Request(url, headers={"User-Agent": USER_AGENT, "Accept-Encoding": "identity"})
         try:
             with urlopen(request, timeout=AVATAR_TIMEOUT_SECONDS) as response:
                 length = response.headers.get("Content-Length")

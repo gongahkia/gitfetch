@@ -9,6 +9,7 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
+from gitfetch import USER_AGENT
 from gitfetch.cache import CacheStore
 from gitfetch.semantics import (
     LanguageData,
@@ -17,9 +18,6 @@ from gitfetch.semantics import (
     profile_measurements,
     repository_coverage,
 )
-
-USER_AGENT = "gitfetch/2.0.0"
-
 
 def configure_http_retries(session: requests.Session) -> None:
     """Retry transient, idempotent GET failures and honor Retry-After."""

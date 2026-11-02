@@ -1,0 +1,270 @@
+{
+  "date": "2026-11-02",
+  "head": "ad06587c17a2a5ee3ca950e4d96b2b106c0663d5",
+  "host": "macOS 15.7.7 x86_64",
+  "installed": {
+    "311": {
+      "python": "3.11.16",
+      "import": "/tmp/gitfetch-073-311/lib/python3.11/site-packages/gitfetch/__init__.py",
+      "versions": {
+        "gitfetch": "2.0.0",
+        "charset-normalizer": "3.4.3",
+        "requests": "2.34.2",
+        "wcwidth": "0.9.3",
+        "certifi": "2026.10.23",
+        "pillow": "13.0.0",
+        "urllib3": "2.8.0",
+        "idna": "3.20"
+      },
+      "resources_and_entrypoints": "PASS",
+      "tests": {
+        "discovered": 623,
+        "passed": 617,
+        "skipped": 6,
+        "seconds": 45.086
+      }
+    },
+    "312": {
+      "python": "3.12.14",
+      "import": "/private/tmp/gitfetch-073-312/lib/python3.12/site-packages/gitfetch/__init__.py",
+      "versions": {
+        "gitfetch": "2.0.0",
+        "charset-normalizer": "3.4.3",
+        "requests": "2.34.2",
+        "wcwidth": "0.9.3",
+        "certifi": "2026.10.23",
+        "pillow": "13.0.0",
+        "urllib3": "2.8.0",
+        "idna": "3.20"
+      },
+      "resources_and_entrypoints": "PASS",
+      "tests": {
+        "discovered": 623,
+        "passed": 617,
+        "skipped": 6,
+        "seconds": 47.36
+      }
+    },
+    "314": {
+      "python": "3.14.7",
+      "import": "/private/tmp/gitfetch-073-314/lib/python3.14/site-packages/gitfetch/__init__.py",
+      "versions": {
+        "gitfetch": "2.0.0",
+        "charset-normalizer": "3.4.3",
+        "requests": "2.34.2",
+        "wcwidth": "0.9.3",
+        "certifi": "2026.10.23",
+        "pillow": "13.0.0",
+        "urllib3": "2.8.0",
+        "idna": "3.20"
+      },
+      "resources_and_entrypoints": "PASS",
+      "tests": {
+        "discovered": 623,
+        "passed": 617,
+        "skipped": 6,
+        "seconds": 46.096
+      }
+    },
+    "sdist": {
+      "python": "3.11.16",
+      "import": "/tmp/gitfetch-073-sdist/lib/python3.11/site-packages/gitfetch/__init__.py",
+      "versions": {
+        "gitfetch": "2.0.0",
+        "charset-normalizer": "3.4.3",
+        "requests": "2.34.2",
+        "wcwidth": "0.9.3",
+        "certifi": "2026.10.23",
+        "pillow": "13.0.0",
+        "urllib3": "2.8.0",
+        "idna": "3.20"
+      },
+      "resources_and_entrypoints": "PASS",
+      "tests": {
+        "discovered": 623,
+        "passed": 617,
+        "skipped": 6,
+        "seconds": 49.478
+      }
+    },
+    "project": {
+      "python": "3.12.14",
+      "import": "/private/tmp/gitfetch-073-project/lib/python3.12/site-packages/gitfetch/__init__.py",
+      "versions": {
+        "gitfetch": "2.0.0",
+        "requests": "2.34.2",
+        "certifi": "2026.10.23",
+        "wcwidth": "0.9.4",
+        "pillow": "13.0.0",
+        "urllib3": "2.8.0",
+        "charset-normalizer": "3.5.2",
+        "idna": "3.20"
+      },
+      "resources_and_entrypoints": "PASS",
+      "tests": {
+        "discovered": 623,
+        "passed": 617,
+        "skipped": 6,
+        "seconds": 49.176
+      }
+    },
+    "actual_homebrew": {
+      "python": "3.12.16",
+      "import": "/home/linuxbrew/.linuxbrew/opt/gitfetch/libexec/lib/python3.12/site-packages/gitfetch/__init__.py",
+      "versions": {
+        "requests": "2.34.2",
+        "gitfetch": "2.0.0",
+        "urllib3": "2.8.0",
+        "pillow": "13.0.0",
+        "charset-normalizer": "3.4.3",
+        "wcwidth": "0.9.3",
+        "certifi": "2026.10.23",
+        "idna": "3.20"
+      },
+      "site_packages": [
+        "/home/linuxbrew/.linuxbrew/opt/gitfetch/libexec/lib/python3.12/site-packages"
+      ],
+      "pillow_features": {
+        "jpg": true,
+        "zlib": true,
+        "webp": true,
+        "freetype2": true
+      },
+      "pip_check": "No broken requirements found.",
+      "resources_and_entrypoints": "PASS"
+    }
+  },
+  "transport": {
+    "311": {
+      "checks": [
+        "idempotent GET status retry",
+        "same-origin authentication retained",
+        "cross-origin authentication stripped",
+        "normal gzip JSON",
+        "excessive encoding chain rejected",
+        "explicit HTTP proxy routing without external DNS",
+        "untrusted TLS certificate rejected",
+        "explicit trusted CA accepted"
+      ],
+      "result": "PASS"
+    },
+    "312": {
+      "checks": [
+        "idempotent GET status retry",
+        "same-origin authentication retained",
+        "cross-origin authentication stripped",
+        "normal gzip JSON",
+        "excessive encoding chain rejected",
+        "explicit HTTP proxy routing without external DNS",
+        "untrusted TLS certificate rejected",
+        "explicit trusted CA accepted"
+      ],
+      "result": "PASS"
+    },
+    "314": {
+      "checks": [
+        "idempotent GET status retry",
+        "same-origin authentication retained",
+        "cross-origin authentication stripped",
+        "normal gzip JSON",
+        "excessive encoding chain rejected",
+        "explicit HTTP proxy routing without external DNS",
+        "untrusted TLS certificate rejected",
+        "explicit trusted CA accepted"
+      ],
+      "result": "PASS"
+    },
+    "project": {
+      "checks": [
+        "idempotent GET status retry",
+        "same-origin authentication retained",
+        "cross-origin authentication stripped",
+        "normal gzip JSON",
+        "excessive encoding chain rejected",
+        "explicit HTTP proxy routing without external DNS",
+        "untrusted TLS certificate rejected",
+        "explicit trusted CA accepted"
+      ],
+      "result": "PASS"
+    },
+    "actual_homebrew": {
+      "checks": [
+        "idempotent GET status retry",
+        "same-origin authentication retained",
+        "cross-origin authentication stripped",
+        "normal gzip JSON",
+        "excessive encoding chain rejected",
+        "explicit HTTP proxy routing without external DNS",
+        "untrusted TLS certificate rejected",
+        "explicit trusted CA accepted"
+      ],
+      "result": "PASS"
+    }
+  },
+  "distributions": [
+    {
+      "name": "gitfetch-2.0.0-py3-none-any.whl",
+      "sha256": "bd9359de9d7e2e1a63f1c8d54891c6ccc016f1c1c19f1ab38bac7256190e546a",
+      "bytes": 557953,
+      "licensed_resources": "PASS"
+    },
+    {
+      "name": "gitfetch-2.0.0.tar.gz",
+      "sha256": "35d01cec14ee94bb094fee60962dc2bb19045e2b46804ee59fc41a5f7d54737b",
+      "bytes": 632084,
+      "licensed_resources": "PASS"
+    }
+  ],
+  "homebrew": {
+    "host_checks": "copy in /tmp, no normal Homebrew mutation",
+    "strict_audit": "PASS",
+    "style": "PASS, 1 file, no offenses",
+    "ruby_syntax": "PASS",
+    "actual_installation": "PASS, Ubuntu 24.04 x86_64 container, standard Linuxbrew prefix",
+    "source": "current local sdist, see distributions for SHA-256",
+    "formula_test": "PASS, codecs, alpha, bundled font and isolated virtualenv",
+    "system_site_packages": false,
+    "native_versions": [
+      "brotli 1.2.1",
+      "bzip2 1.0.8",
+      "ca-certificates 2026-10-20",
+      "cmake 4.4.5",
+      "expat 2.9.0",
+      "freetype 2.15.0",
+      "giflib 6.1.3",
+      "gitfetch 2.0.0",
+      "jpeg-turbo 3.2.1",
+      "keyutils 1.6.3",
+      "krb5 1.22.2_2",
+      "libedit 20260512-3.1",
+      "libffi 3.8.0",
+      "libnsl 2.0.1",
+      "libpng 1.6.59",
+      "libtirpc 1.3.8",
+      "libxcrypt 4.5.2",
+      "mpdecimal 4.0.1",
+      "ncurses 6.6",
+      "openssl@3 3.5.9",
+      "openssl@4 4.1.0",
+      "pkgconf 3.0.10",
+      "python@3.12 3.12.16",
+      "readline 8.3.6",
+      "sqlite 3.54.1",
+      "webp 1.6.0",
+      "xz 5.8.4",
+      "zlib-ng-compat 2.3.3_1"
+    ],
+    "tests": {
+      "discovered": 623,
+      "passed": 617,
+      "skipped": 6,
+      "seconds": 28.541
+    },
+    "manual_macos_installation": "NOT VERIFIED",
+    "release_artifact_installation": "NOT VERIFIED",
+    "brew_source_commit": "bf464f57275cae0be106b43d190c98564ac59b0e",
+    "brew_version_output": "Homebrew >=4.3.0 (shallow or no git repository)",
+    "ubuntu_image_id": "sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f579aaff33ac",
+    "disposable_container": "Removed after evidence capture; preexisting Docker images and normal Homebrew untouched"
+  }
+}

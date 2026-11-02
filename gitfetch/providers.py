@@ -10,6 +10,7 @@ from urllib.parse import quote
 
 import requests
 
+from gitfetch import USER_AGENT
 from gitfetch.cache import CacheStore
 from gitfetch.config import MODULE_METADATA, SUPPORTED_PROVIDERS, ConfigError
 from gitfetch.github_api import (
@@ -58,7 +59,7 @@ class BaseProviderClient:
         self.base_url = base_url.rstrip("/")
         self.session = ProviderSession()
         configure_http_retries(self.session)
-        self.session.headers.update({"User-Agent": "gitfetch/2.0.0"})
+        self.session.headers.update({"User-Agent": USER_AGENT})
 
     def supports_module(self, name: str) -> bool:
         if name not in MODULE_METADATA:

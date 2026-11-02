@@ -4,6 +4,19 @@ Assessment: 2026-11-02. **Preparation only.** All commit, tag, push, publication
 version-edit and formula-edit commands below are future maintainer instructions,
 not actions executed by this assessment.
 
+Subsequent security evidence (2026-11-02): T07.2 adopted Python >=3.11 and Pillow
+>=13,<14; T07.3 replaces the four vulnerable Homebrew network resource pins.
+The original 16 records represent nine distinct advisories, all resolved by
+verified fixed versions. Fresh exact-pin and installed dependency audits report
+zero known third-party advisories. See [Pillow remediation](pillow-security-remediation.md)
+and [Homebrew security remediation](HOMEBREW-SECURITY-V3.md). The formula now
+declares native Pillow prerequisites and uses an isolated virtualenv; a
+disposable Linux Homebrew source installation and its full 623-test suite pass
+(617 passed, 6 skipped). These supersede the
+dependency-security and Python-policy blockers in this historical snapshot;
+they do not authorize version synchronization or claim final 3.0.0/Homebrew
+release-artifact acceptance. The release remains **NOT READY** for publication.
+
 ## Verdict
 
 **NOT READY to publish the current artifacts as Gitfetch 3.0.0.**
