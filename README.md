@@ -319,6 +319,8 @@ $ gitfetch --set profile.token_command="security find-generic-password -a work -
 $ uv tool uninstall gitfetch
 ```
 
+For an existing pip installation, use `python -m pip uninstall gitfetch` instead.
+
 If you installed via the installer script, also remove the `export PATH` line the installer added to your shell rc file (`~/.bashrc`, `~/.zshrc`, or `~/.config/fish/config.fish`).
 
 ### Situation 3: Shell PATH problems
