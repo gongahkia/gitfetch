@@ -43,4 +43,4 @@ gitfetch = "gitfetch.main:main"
 include = ["gitfetch*"]
 
 [tool.setuptools.package-data]
-gitfetch = ["assets/language-icons/*.png", "assets/language-icons/LICENSE-devicon.txt"]
+gitfetch = ["assets/language-icons/*.png", "assets/language-icons/LICENSE-devicon.txt", "assets/fonts/*.ttf", "assets/fonts/LICENSE-DejaVu.txt"]

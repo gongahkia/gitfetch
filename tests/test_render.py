@@ -58,6 +58,7 @@ class RenderTests(unittest.TestCase):
 
     def test_render_card_emits_card_with_login_and_languages(self) -> None:
         config = self._visual_config()
+        config["display"]["export_style"] = "legacy"
         modules = [
             ModuleResult(
                 name="languages",

@@ -6,7 +6,7 @@ from collections.abc import Iterator
 from io import BytesIO
 from typing import Any
 
-from PIL import Image, ImageChops, ImageDraw, ImageFont, ImageOps
+from PIL import Image, ImageChops, ImageDraw, ImageOps
 
 from gitfetch.images import avatar_render, fetch_avatar_image
 from gitfetch.language_icons import language_icon_data_uri, language_icon_image
@@ -39,6 +39,7 @@ CARD_PALETTE = {
 
 
 def _xterm256_to_hex(index: int) -> str:
+    index = max(0, min(255, index))
     if index < 16:
         return NAMED_FG.get(30 + index if index < 8 else 90 + (index - 8), "#cccccc")
     if index >= 232:
@@ -79,7 +80,8 @@ def _ansi_segments(line: str) -> Iterator[tuple[str, str | None, str | None]]:
                         bg = color
                     i += 2
                 elif kind == 2 and i + 4 < len(codes):
-                    color = f"#{codes[i+2]:02x}{codes[i+3]:02x}{codes[i+4]:02x}"
+                    red, green, blue = (max(0, min(255, value)) for value in codes[i+2:i+5])
+                    color = f"#{red:02x}{green:02x}{blue:02x}"
                     if code == 38:
                         fg = color
                     else:
@@ -92,12 +94,17 @@ def _ansi_segments(line: str) -> Iterator[tuple[str, str | None, str | None]]:
 
 
 def render_terminal_svg(text: str, config: dict[str, Any]) -> str:
+    from gitfetch.design import HEX_COLOR
+    for key in ("svg_background", "svg_foreground"):
+        if key in config["display"] and not HEX_COLOR.fullmatch(str(config["display"][key])):
+            raise ValueError("invalid SVG color")
     char_width = 8.0
     line_height = 16.0
     font_size = 14
     background = config["display"].get("svg_background", "#0d1117")
     foreground = config["display"].get("svg_foreground", "#c9d1d9")
-    raw_lines = [sanitize_styled_text(line) for line in text.split("\n")]
+    raw_lines = [clip_text(sanitize_styled_text(line[:8192]), 240, trusted_ansi=True)
+                 for line in text[:262144].split("\n")[:160]]
     visible_lengths = [cell_width(line) for line in raw_lines]
     max_len = max(visible_lengths) if visible_lengths else 0
     width = int(max_len * char_width + 32)
@@ -154,13 +161,14 @@ def _avatar_image(url: str | None, size: int) -> Image.Image | None:
     return canvas
 
 
-def _font(size: int) -> ImageFont.ImageFont:
-    for name in ("Arial.ttf", "Helvetica.ttc", "DejaVuSans.ttf"):
-        try:
-            return ImageFont.truetype(name, size)
-        except OSError:
-            continue
-    return ImageFont.load_default()
+def _font(size: int):
+    from gitfetch.export_fonts import font
+    return font(size)
+
+
+def _draw_text(draw, position, value, *, font, **kwargs):
+    from gitfetch.export_fonts import drawable
+    draw.text(position, drawable(sanitize_text(value), font), font=font, **kwargs)
 
 
 def _module_data(modules: list[ModuleResult], name: str) -> Any:
@@ -178,7 +186,7 @@ def _module_lines_text(modules: list[ModuleResult], name: str) -> list[str]:
 
 
 @avatar_render
-def render_card_svg(config: dict[str, Any], user: dict[str, Any], modules: list[ModuleResult]) -> str:
+def _legacy_render_card_svg(config: dict[str, Any], user: dict[str, Any], modules: list[ModuleResult]) -> str:
     palette = dict(CARD_PALETTE)
     palette.update(config["display"].get("card_palette", {}) or {})
     width = int(config["display"].get("card_width", 720))
@@ -217,9 +225,10 @@ def render_card_svg(config: dict[str, Any], user: dict[str, Any], modules: list[
 
     stats_y = 160
     stats_items: list[tuple[str, str]] = []
-    stats_items.append((_metric_value(user.get("public_repos")), "repos"))
-    stats_items.append((_metric_value(user.get("followers")), "followers"))
-    stats_items.append((_metric_value(user.get("following")), "following"))
+    if any(module.name == "stats" for module in modules):
+        stats_items.append((_metric_value(user.get("public_repos")), "repos"))
+        stats_items.append((_metric_value(user.get("followers")), "followers"))
+        stats_items.append((_metric_value(user.get("following")), "following"))
     streaks = _module_data(modules, "streaks") or {}
     if streaks.get("current") is not None:
         stats_items.append((str(streaks["current"]), "current streak"))
@@ -281,7 +290,7 @@ def render_card_svg(config: dict[str, Any], user: dict[str, Any], modules: list[
 
 
 @avatar_render
-def render_card_png(config: dict[str, Any], user: dict[str, Any], modules: list[ModuleResult], path) -> None:
+def _legacy_render_card_png(config: dict[str, Any], user: dict[str, Any], modules: list[ModuleResult], path) -> None:
     palette = dict(CARD_PALETTE)
     palette.update(config["display"].get("card_palette", {}) or {})
     width = int(config["display"].get("card_width", 720))
@@ -306,17 +315,17 @@ def render_card_png(config: dict[str, Any], user: dict[str, Any], modules: list[
     name = user.get("name") or login
     title_limit = max(12, (width - text_x - 32) // 12)
     bio_limit = max(20, (width - text_x - 32) // 7)
-    draw.text((text_x, 54), _truncate(name, title_limit), fill=palette["text"], font=title_font)
-    draw.text((text_x, 84), f"@{_truncate(login, title_limit)}", fill=palette["accent"], font=body_font)
+    _draw_text(draw, (text_x, 54), _truncate(name, title_limit), fill=palette["text"], font=title_font)
+    _draw_text(draw, (text_x, 84), f"@{_truncate(login, title_limit)}", fill=palette["accent"], font=body_font)
     bio = user.get("bio") or ""
     if bio:
-        draw.text((text_x, 108), _truncate(bio, bio_limit), fill=palette["muted"], font=small_font)
+        _draw_text(draw, (text_x, 108), _truncate(bio, bio_limit), fill=palette["muted"], font=small_font)
 
     stats = [
         (_metric_value(user.get("public_repos")), "repos"),
         (_metric_value(user.get("followers")), "followers"),
         (_metric_value(user.get("following")), "following"),
-    ]
+    ] if any(module.name == "stats" for module in modules) else []
     streaks = _module_data(modules, "streaks") or {}
     if streaks.get("current") is not None:
         stats.append((str(streaks["current"]), "current streak"))
@@ -326,12 +335,12 @@ def render_card_png(config: dict[str, Any], user: dict[str, Any], modules: list[
     column_w = (width - 64) / max(1, len(stats))
     for i, (value, label) in enumerate(stats):
         x = 32 + int(i * column_w)
-        draw.text((x, 150), sanitize_text(value), fill=palette["text"], font=title_font)
-        draw.text((x, 178), label, fill=palette["muted"], font=small_font)
+        _draw_text(draw, (x, 150), sanitize_text(value), fill=palette["text"], font=title_font)
+        _draw_text(draw, (x, 178), label, fill=palette["muted"], font=small_font)
 
     languages = _module_data(modules, "languages") or []
     if languages:
-        draw.text((32, 216), "LANGUAGES", fill=palette["muted"], font=small_font)
+        _draw_text(draw, (32, 216), "LANGUAGES", fill=palette["muted"], font=small_font)
         x = 32
         show_icons = bool(config["display"].get("card_language_icons", True))
         for entry in languages[:5]:
@@ -343,21 +352,21 @@ def render_card_png(config: dict[str, Any], user: dict[str, Any], modules: list[
             draw.rounded_rectangle((x, 232, x + pill_w, 254), radius=10, fill=palette["surface"], outline=palette["border"])
             if icon:
                 img.paste(icon, (x + 6, 235), icon)
-            draw.text((x + (28 if icon else 10), 237), label, fill=palette["accent"], font=small_font)
+            _draw_text(draw, (x + (28 if icon else 10), 237), label, fill=palette["accent"], font=small_font)
             x += pill_w + 8
 
     pinned_lines = _module_lines_text(modules, "pinned")
     if pinned_lines:
-        draw.text((32, 280), "PINNED", fill=palette["muted"], font=small_font)
+        _draw_text(draw, (32, 280), "PINNED", fill=palette["muted"], font=small_font)
         for i, line in enumerate(pinned_lines[:3]):
-            draw.text((32, 298 + i * 16), line[:80], fill=palette["text"], font=small_font)
+            _draw_text(draw, (32, 298 + i * 16), line[:80], fill=palette["text"], font=small_font)
 
-    draw.text((width - 70, height - 24), "gitfetch", fill=palette["muted"], font=small_font)
+    _draw_text(draw, (width - 70, height - 24), "gitfetch", fill=palette["muted"], font=small_font)
     img.save(path, "PNG")
 
 
 @avatar_render
-def render_summary_card_svg(
+def _legacy_render_summary_card_svg(
     config: dict[str, Any],
     title: str,
     subtitle: str,
@@ -403,7 +412,7 @@ def render_summary_card_svg(
 
 
 @avatar_render
-def render_summary_card_png(
+def _legacy_render_summary_card_png(
     config: dict[str, Any],
     title: str,
     subtitle: str,
@@ -432,23 +441,23 @@ def render_summary_card_png(
         text_x += avatar_size + 20
     title_limit = max(12, (width - text_x - 32) // 13)
     subtitle_limit = max(20, (width - text_x - 32) // 7)
-    draw.text((text_x, 44), _truncate(title, title_limit), fill=palette["text"], font=title_font)
+    _draw_text(draw, (text_x, 44), _truncate(title, title_limit), fill=palette["text"], font=title_font)
     if subtitle:
-        draw.text((text_x, 78), _truncate(subtitle, subtitle_limit), fill=palette["accent"], font=body_font)
+        _draw_text(draw, (text_x, 78), _truncate(subtitle, subtitle_limit), fill=palette["accent"], font=body_font)
 
     y = 126
     for module in modules[:5]:
-        draw.text((32, y), sanitize_text(module.title).upper(), fill=palette["muted"], font=small_font)
+        _draw_text(draw, (32, y), sanitize_text(module.title).upper(), fill=palette["muted"], font=small_font)
         y += 18
         for line in module.lines[:4]:
-            draw.text((32, y), sanitize_text(line)[:95], fill=palette["text"], font=body_font)
+            _draw_text(draw, (32, y), sanitize_text(line)[:95], fill=palette["text"], font=body_font)
             y += 16
             if y > height - 34:
                 break
         y += 10
         if y > height - 34:
             break
-    draw.text((width - 70, height - 24), "gitfetch", fill=palette["muted"], font=small_font)
+    _draw_text(draw, (width - 70, height - 24), "gitfetch", fill=palette["muted"], font=small_font)
     img.save(path, "PNG")
 
 
@@ -458,3 +467,88 @@ def _xml_escape(text: str) -> str:
 
 def _metric_value(value: Any) -> str:
     return "unavailable" if value is None else str(value)
+
+
+def _legacy_user(user, modules):
+    if any(module.name == "identity" for module in modules):
+        return user
+    return {**user, "name": user.get("login"), "bio": ""}
+
+
+def _legacy_export(config):
+    style = config["display"].get("export_style", "auto")
+    return style == "legacy" or style == "auto" and config["display"].get("presentation") == "classic"
+
+
+def _validate_export(config):
+    from gitfetch.export_design import dimensions, export_colors
+    dimensions(config["display"])
+    export_colors(config["display"])
+
+
+def _profile_plan(config, user, modules, document=None):
+    from datetime import datetime, timezone
+
+    from gitfetch.export_design import plan_profile_card
+    from gitfetch.images import fit_avatar_image
+    from gitfetch.presentation import build_profile_document
+    if document is None:
+        provider = config.get("profile", {}).get("provider", "github")
+        instance = config.get("providers", {}).get(provider, {}).get("base_url", "")
+        document = build_profile_document(user, modules, provider=provider, instance=instance)
+    image = fetch_avatar_image(document.avatar_reference) if config["display"].get("avatar", True) else None
+    if image is not None:
+        image = fit_avatar_image(image, config["display"].get("export_avatar_fit", "original"))
+    return plan_profile_card(document, config["display"], image,
+                             reference_date=config.get("_reference_date") or datetime.now(timezone.utc).date())
+
+
+@avatar_render
+def render_card_svg(config: dict[str, Any], user: dict[str, Any], modules: list[ModuleResult], *, document=None) -> str:
+    _validate_export(config)
+    visible = [module for module in modules if not module.hidden]
+    if _legacy_export(config):
+        return _legacy_render_card_svg(config, _legacy_user(user, visible), visible)
+    from gitfetch.export_paint import scene_svg
+    return scene_svg(_profile_plan(config, user, visible, document))
+
+
+@avatar_render
+def render_card_png(config: dict[str, Any], user: dict[str, Any], modules: list[ModuleResult], path, *, document=None) -> None:
+    _validate_export(config)
+    visible = [module for module in modules if not module.hidden]
+    if _legacy_export(config):
+        return _legacy_render_card_png(config, _legacy_user(user, visible), visible, path)
+    from gitfetch.export_paint import scene_png
+    scene_png(_profile_plan(config, user, visible, document), path)
+
+
+def _summary_plan(config, title, subtitle, modules, avatar_url):
+    from gitfetch.export_design import plan_summary_card
+    from gitfetch.images import fit_avatar_image
+    image = fetch_avatar_image(avatar_url) if avatar_url and config["display"].get("avatar", True) else None
+    if image is not None:
+        image = fit_avatar_image(image, config["display"].get("export_avatar_fit", "original"))
+    return plan_summary_card(title, subtitle, modules, config["display"], image)
+
+
+@avatar_render
+def render_summary_card_svg(config: dict[str, Any], title: str, subtitle: str,
+                            modules: list[ModuleResult], avatar_url: str | None = None) -> str:
+    _validate_export(config)
+    modules = [module for module in modules if not module.hidden]
+    if _legacy_export(config):
+        return _legacy_render_summary_card_svg(config, title, subtitle, modules, avatar_url)
+    from gitfetch.export_paint import scene_svg
+    return scene_svg(_summary_plan(config, title, subtitle, modules, avatar_url))
+
+
+@avatar_render
+def render_summary_card_png(config: dict[str, Any], title: str, subtitle: str,
+                            modules: list[ModuleResult], avatar_url: str | None, path) -> None:
+    _validate_export(config)
+    modules = [module for module in modules if not module.hidden]
+    if _legacy_export(config):
+        return _legacy_render_summary_card_png(config, title, subtitle, modules, avatar_url, path)
+    from gitfetch.export_paint import scene_png
+    scene_png(_summary_plan(config, title, subtitle, modules, avatar_url), path)

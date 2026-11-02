@@ -160,6 +160,7 @@ class ModernRenderTests(unittest.TestCase):
         self.assertEqual(result, {"user": "alex-dev", "modules": {"plugin": {"text": raw, "numeric": None}}})
 
     def test_classic_ansi_plain_and_exports_ignore_modern_details(self):
+        self.config["display"]["export_style"] = "legacy"
         for output_format in ("plain", "ansi", "json", "svg", "card"):
             with self.subTest(output_format=output_format):
                 self.config["display"]["presentation"] = "classic"
@@ -308,6 +309,7 @@ class ModernPipelineTests(unittest.TestCase):
         self.assertIn("Identity\n", output.read_text())
 
     def test_png_bytes_ignore_presentation_and_details(self):
+        self.config["display"]["export_style"] = "legacy"
         output = self.root / "profile.png"
         self.run_cli("--presentation", "classic", "--save", str(output), output_format="png")
         original = output.read_bytes()

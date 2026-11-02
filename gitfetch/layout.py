@@ -15,6 +15,7 @@ from urllib.parse import urlsplit
 
 from wcwidth import iter_graphemes
 
+from gitfetch.design import VISUAL_PRESETS
 from gitfetch.presentation import (
     ContributionActivity,
     LanguageDistribution,
@@ -28,7 +29,7 @@ from gitfetch.presentation import (
 from gitfetch.semantics import Measurement
 from gitfetch.terminal_text import cell_width, clip_text, sanitize_text
 
-Role = Literal["identity", "heading", "text", "muted", "track", "accent", "stat", "notice"]
+Role = Literal["identity", "heading", "text", "muted", "track", "accent", "stat", "notice", "handle", "warning"]
 Composition = Literal["split", "stack", "text"]
 # Standalone/help-quoted flags, not double hyphens inside URL paths or queries.
 _FLAG = re.compile(r"(?<![^\s(\[{'\"`])--[A-Za-z][A-Za-z0-9-]*")
@@ -48,6 +49,7 @@ class Preferences:
     avatar: bool = True
     avatar_width: int = 100
     avatar_style: str = "ascii"
+    visual_preset: str = "balanced"
 
 
 @dataclass(frozen=True)
@@ -272,7 +274,7 @@ def _identity(content: ProfileIdentity, width: int, rows: int, details: bool) ->
     if host and content.provider in {"gitea", "forgejo", "gitlab"}:
         provider += f" · {host}"
     handle = f"@{content.username} · " if content.username and content.display_name else ""
-    result.extend(_wrap(handle + provider, width, "muted"))
+    result.extend(_wrap(handle + provider, width, "handle"))
     if content.biography:
         limit = 1 if rows <= 20 else 2 if rows <= 30 else 4
         bio, shortened = (content.biography, False) if details else _bounded(content.biography, width, limit + 1)
@@ -297,7 +299,7 @@ def _identity(content: ProfileIdentity, width: int, rows: int, details: bool) ->
     return result, condensed
 
 
-def _metrics(section: PresentationSection, content: MetricGroup, width: int, reference: date) -> tuple[list[Row], int]:
+def _metrics(section: PresentationSection, content: MetricGroup, width: int, reference: date, *, expressive: bool = False) -> tuple[list[Row], int]:
     labels = {"public_repos": "public repos", "public_gists": "gists", "followers": "followers", "following": "following"}
     values: list[str] = []
     secondary: list[str] = []
@@ -312,7 +314,7 @@ def _metrics(section: PresentationSection, content: MetricGroup, width: int, ref
             label += f" ({metric.measurement.scope})"
         target = secondary if section.name == "stats" and metric.identifier not in {"public_repos", "followers"} else values
         target.append(f"{_value(metric.measurement)}{unit} {label}")
-    result = _pack(values, width, "stat")
+    result = [row for value in values for row in _wrap(value, width, "stat")] if expressive else _pack(values, width, "stat")
     primary_rows = len(result)
     if section.name == "stats" and type(section.raw_data) in (dict, MappingProxyType):
         user = section.raw_data.get("user")
@@ -329,10 +331,10 @@ def _metrics(section: PresentationSection, content: MetricGroup, width: int, ref
     return result, max(1, primary_rows)
 
 
-def _languages(content: LanguageDistribution, width: int, height: int, details: bool) -> tuple[list[Row], bool]:
+def _languages(content: LanguageDistribution, width: int, height: int, details: bool, *, dense: bool = False) -> tuple[list[Row], bool]:
     measurement = content.measurement
     if measurement.availability != "available":
-        return _wrap(f"Languages: {_value(measurement)}", width, "notice"), False
+        return _wrap(f"Languages: {_value(measurement)}", width, "warning"), False
     entries = content.selected
     limit = 2 if height <= 15 else 3 if height <= 24 else 5 if height <= 30 else len(entries)
     shown = entries if details else entries[:limit]
@@ -341,7 +343,7 @@ def _languages(content: LanguageDistribution, width: int, height: int, details: 
     header = "Languages · bytes" if measurement.unit == "bytes" else (
         "Languages · repository prevalence" if "prevalence" in measurement.scope else
         "Languages · primary-language repos" if measurement.unit == "repositories" else f"Languages · {measurement.unit}")
-    compact = width < 52 or (height <= 20 and not details)
+    compact = dense or width < 52 or (height <= 20 and not details)
     if compact and measurement.unit == "repositories":
         header = "Language prevalence · repos" if "prevalence" in measurement.scope else "Primary languages · repos"
     result = _wrap(header, width, "heading")
@@ -366,7 +368,7 @@ def _languages(content: LanguageDistribution, width: int, height: int, details: 
     compact_values = []
     clipped_name = False
     for entry, suffix in zip(shown, suffixes):
-        if height <= 20 and not details and width >= 40:
+        if (dense or height <= 20 and not details) and width >= 40:
             compact_values.append(f"{entry.language} {suffix}")
             continue
         if not compact and fractions and bar_width >= 8:
@@ -410,7 +412,7 @@ def _contributions(content: ContributionActivity, width: int, height: int, detai
         result = _wrap(heading, width, "heading")
         result.extend(_wrap(f"{measurement.coverage} coverage", width, "muted"))
     if measurement.availability != "available":
-        result.extend(_wrap(_value(measurement), width, "notice"))
+        result.extend(_wrap(_value(measurement), width, "warning"))
         return result, False
     if not observations:
         result.extend(_wrap("No dated observations · coverage unknown", width, "notice"))
@@ -481,7 +483,14 @@ def _contributions(content: ContributionActivity, width: int, height: int, detai
     return result, condensed
 
 
-def _section(section: PresentationSection, width: int, height: int, details: bool, reference: date) -> _Section:
+def _section(section: PresentationSection, width: int, height: int, details: bool, reference: date,
+             visual_preset: str = "balanced") -> _Section:
+    preset = VISUAL_PRESETS[visual_preset]
+    # Density affects formatting, never the viewport budget or selected data.
+    if preset.compact:
+        height = min(height, 20)
+    elif preset.expressive and height >= 26:
+        height += 6
     content = section.content
     condensed = False
     compact: list[Row] = []
@@ -490,16 +499,16 @@ def _section(section: PresentationSection, width: int, height: int, details: boo
         rows, condensed = _identity(content, width, height, details)
         priority, minimum = 0, 2
     elif isinstance(content, MetricGroup):
-        rows, primary_rows = _metrics(section, content, width, reference)
+        rows, primary_rows = _metrics(section, content, width, reference, expressive=preset.expressive and height >= 32 and width >= 40)
         if section.name == "stats":
             priority, minimum = 1, primary_rows
         else:
             rows = _wrap(section.title, width, "heading") + rows
     elif isinstance(content, LanguageDistribution):
-        rows, condensed = _languages(content, width, height, details)
+        rows, condensed = _languages(content, width, height, details, dense=preset.compact)
         priority, minimum = 2, min(3, len(rows))
     elif isinstance(content, ContributionActivity):
-        rows, condensed = _contributions(content, width, height, details)
+        rows, condensed = _contributions(content, width, min(height, 15) if preset.compact else height, details)
         if not details:
             compact, _ = _contributions(content, width, min(height, 15), False)
         priority, minimum = 3, len(compact) if compact else 2
@@ -569,7 +578,7 @@ def _section(section: PresentationSection, width: int, height: int, details: boo
                     tuple(Row(row.spans, section.name) for row in compact))
 
 
-def _fit(sections: list[_Section], width: int, budget: int, details: bool) -> tuple[tuple[Row, ...], bool, tuple[str, ...]]:
+def _fit(sections: list[_Section], width: int, budget: int, details: bool, *, compact: bool = False) -> tuple[tuple[Row, ...], bool, tuple[str, ...]]:
     condensed = any(section.condensed for section in sections)
     sizes = [len(section.rows) for section in sections]
     if not details:
@@ -587,6 +596,8 @@ def _fit(sections: list[_Section], width: int, budget: int, details: bool) -> tu
                         for index, section in enumerate(sections))
         room = max(0, budget - reserve - sum(min(len(s.rows), s.minimum) for s in sections))
         spacing = max(spacing, min(preferred_count, room))
+    if compact:
+        spacing = 0
     if not details:
         excess = max(0, sum(sizes) + spacing + reserve - budget)
         order = sorted(range(len(sections)), key=lambda i: (sections[i].priority, i), reverse=True)
@@ -612,6 +623,8 @@ def _fit(sections: list[_Section], width: int, budget: int, details: bool) -> tu
             if not excess:
                 break
         spacing = min(max(0, sum(size > 0 for size in sizes) - 1), max(0, budget - sum(sizes) - reserve))
+    if compact:
+        spacing = 0
     rows: list[Row] = []
     omitted = []
     boundaries = [index for index, size in enumerate(sizes) if size][1:]
@@ -641,6 +654,7 @@ def plan_profile(document: ProfileDocument, viewport: Viewport, preferences: Pre
                  avatar: AvatarGeometry | None = None, *, reference_date: date) -> LayoutPlan:
     """Plan one frame from immutable semantic inputs and an explicit UTC date."""
     preferences = preferences or Preferences()
+    preset = VISUAL_PRESETS[preferences.visual_preset]
     columns, height = max(1, viewport.columns), max(1, viewport.rows)
     margin = min(max(0, preferences.margin), max(0, (columns - min(20, columns)) // 2))
     usable = max(1, columns - 2 * margin)
@@ -649,11 +663,13 @@ def plan_profile(document: ProfileDocument, viewport: Viewport, preferences: Pre
     avatar_width = avatar_rows = 0
     text_width = usable
     if avatar_may_fit(viewport, preferences) and avatar and avatar.width > 0 and avatar.height > 0:
-        max_rows = min(16, max(4, budget // (3 if preferences.layout == "stack" else 2)))
+        divisor = 3 if preferences.layout == "stack" else 2
+        allocation = budget * 2 // 3 if preset.expressive and preferences.layout == "split" else budget // divisor
+        max_rows = min(preset.avatar_rows, max(4, allocation))
         if preferences.details:
             max_rows = min(16, max_rows)
-        cap = min(max(1, preferences.avatar_width), 34, max(1, usable // 3))
-        # A bounded scan (at most 34 columns); never render or download a candidate.
+        cap = min(max(1, preferences.avatar_width), preset.avatar_columns, max(1, usable // 3))
+        # A bounded scan (at most 40 columns); never render or download a candidate.
         candidates = [w for w in range(8, cap + 1) if avatar.rows_at(w, preferences.avatar_style) <= max_rows]
         if candidates:
             avatar_width = candidates[-1]
@@ -668,13 +684,13 @@ def plan_profile(document: ProfileDocument, viewport: Viewport, preferences: Pre
     if composition == "text":
         avatar_width = avatar_rows = 0
     text_budget = max(1, budget - avatar_rows - 1) if composition == "stack" else budget
-    sections = [_section(section, text_width, height, preferences.details, reference_date) for section in document.sections]
+    sections = [_section(section, text_width, height, preferences.details, reference_date, preferences.visual_preset) for section in document.sections]
     # A stacked avatar must not crowd out the profile's primary information.
     # Fall back to text rather than reversing an explicit stack preference.
     primary = sum(min(len(s.rows), s.minimum) for s in sections)
     if composition == "stack" and not preferences.details and primary + 2 > text_budget:
         composition, avatar_width, avatar_rows, text_budget = "text", 0, 0, budget
-    rows, condensed, omitted = _fit(sections, text_width, text_budget, preferences.details)
+    rows, condensed, omitted = _fit(sections, text_width, text_budget, preferences.details, compact=preset.compact)
     if avatar_width and avatar is not None:
         content_cap = max(4, len(rows)) if composition == "split" else max(3, len(rows) // 2)
         if avatar_rows > content_cap:
@@ -687,6 +703,6 @@ def plan_profile(document: ProfileDocument, viewport: Viewport, preferences: Pre
             text_budget = max(1, budget - avatar_rows - 1) if composition == "stack" else budget
             # At most one content reflow for short profiles; never another asset
             # load or image encoding, and no candidate-by-candidate text layouts.
-            sections = [_section(section, text_width, height, preferences.details, reference_date) for section in document.sections]
-            rows, condensed, omitted = _fit(sections, text_width, text_budget, preferences.details)
+            sections = [_section(section, text_width, height, preferences.details, reference_date, preferences.visual_preset) for section in document.sections]
+            rows, condensed, omitted = _fit(sections, text_width, text_budget, preferences.details, compact=preset.compact)
     return LayoutPlan(viewport, composition, text_width, margin, avatar_width, avatar_rows, rows, condensed, omitted)

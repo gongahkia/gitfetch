@@ -32,7 +32,12 @@ from gitfetch.presentation import build_profile_document
 from gitfetch.providers import create_provider_client, provider_base_url
 from gitfetch.render import color_enabled, modern_enabled, render_output
 from gitfetch.semantics import Measurement
-from gitfetch.terminal_capabilities import discover_terminal, resolve_preferences, select_avatar_backend
+from gitfetch.terminal_capabilities import (
+    classify_terminal,
+    discover_terminal,
+    resolve_preferences,
+    select_avatar_backend,
+)
 from gitfetch.terminal_output import TerminalWriteError, emit_native_profile
 from gitfetch.terminal_text import sanitize_text
 
@@ -56,6 +61,8 @@ def build_parser() -> argparse.ArgumentParser:
     color_group.add_argument("--color", dest="color", action="store_true", default=None, help="Force ANSI colors on (overrides NO_COLOR and TTY detection)")
     color_group.add_argument("--no-color", dest="color", action="store_false", help="Force ANSI colors off")
     from gitfetch.render import THEMES
+    parser.add_argument("--visual-preset", choices=["balanced", "compact", "showcase"],
+                        help="Modern visual layout; independent of config/module presets")
     parser.add_argument("--theme", choices=sorted(THEMES.keys()), help="Color theme")
     parser.add_argument("--avatar-style", choices=["ascii", "halfblock", "braille"], help="Avatar rendering style")
     parser.add_argument("--avatar-renderer", choices=["auto", "kitty", "text"], help="Interactive modern avatar backend; explicit styles force text unless overridden")
@@ -419,6 +426,8 @@ def handle_render_command(args: argparse.Namespace) -> int:
         if args.margin < 0:
             raise ConfigError("--margin must be non-negative")
         config["display"]["margin"] = args.margin
+    if args.visual_preset:
+        config["display"]["visual_preset"] = args.visual_preset
     if args.theme:
         config["display"]["theme"] = args.theme
     if args.color is True:
@@ -440,14 +449,17 @@ def handle_render_command(args: argparse.Namespace) -> int:
     normalize_config(config)
     preferences = resolve_preferences(config, saved=saved_display, overrides=args.set,
                                       renderer=args.avatar_renderer, style=args.avatar_style)
-    capabilities = discover_terminal(sys.stdout, sys.stdin)
+    selected_format = args.format or config["display"].get("format", "ansi")
+    headless_export = selected_format in {"svg", "card", "png"} and not args.graphics_info
+    capabilities = (classify_terminal({}, stdout_tty=False, writable=True) if headless_export
+                    else discover_terminal(sys.stdout, sys.stdin))
     if not capabilities.writable and not args.save:
         raise TerminalWriteError()
     decision = select_avatar_backend(
         capabilities, preferences, output_format=args.format or config["display"].get("format", "ansi"),
         modern=modern_enabled(config, args.format or config["display"].get("format", "ansi")),
         avatar=config["display"].get("avatar", True), captured=bool(args.save), watch=bool(args.watch),
-        color_allowed=color_enabled(config, "ansi") and config["display"].get("theme") != "mono",
+        color_allowed=not headless_export and color_enabled(config, "ansi") and config["display"].get("theme") != "mono",
     )
     if args.graphics_info:
         print(json.dumps({"capabilities": asdict(capabilities), "decision": asdict(decision),
@@ -506,6 +518,8 @@ def handle_render_command(args: argparse.Namespace) -> int:
         # A fresh frame memo lets watch respect TTL/refresh without retaining
         # decoded images indefinitely. Acquisition remains lazy in renderers.
         render_config = {**config, "display": dict(config["display"]), "_avatar_loader": AvatarLoader(avatar_policy)}
+        if output_format == "ansi" and modern_enabled(config, output_format) and capabilities.color == "256":
+            render_config["_terminal_color"] = "256"
         if capabilities.interactive and output_format == "ansi" and modern_enabled(config, output_format) and not args.save:
             render_config["display"]["avatar_style"] = decision.text_style
             if decision.color != "auto":
@@ -515,7 +529,7 @@ def handle_render_command(args: argparse.Namespace) -> int:
         if output_format == "png":
             from gitfetch.formats import render_card_png
 
-            render_card_png(render_config, context.user, [m for m in module_results if not m.hidden], _png_output_path(args))
+            render_card_png(render_config, context.user, [m for m in module_results if not m.hidden], _png_output_path(args), document=document)
             print(f"wrote {args.save}")
             return
         _write_or_print(render_output(render_config, context.user, module_results, output_format, document=document), args)

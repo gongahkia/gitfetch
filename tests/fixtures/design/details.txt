@@ -1,0 +1,41 @@
+################   Alex Rivera
+&##SSSS##SSSS##&   @alex-dev · GitHub
+&#SSS&$**$&SSS#&   Building thoughtful developer tools and small, useful things
+@#S#S@!!!!@S#S#@   for the open web.
+@#SSS#@$$@#SSS#@   Singapore   Open Source Collective   alex.example
+@#S#%******%#S#@   42 public repos   1,280 followers
+$@S&********&S@$   87 following   0 gists   7 years on platform
+$$$@$%%%%%%$@$$$   Languages · bytes
+                   20/42 selected repos · partial
+                   Python 73.0%   TypeScript 16.0%   Go 6.0%   Rust 3.0%
+                   Shell 1.0%
+                   Activity · contributions · unknown coverage
+                   Shown: 2025-11-07 – 2026-01-28
+                   Su    ▆ ▄ ▂ · ▆ ▄ ? · ▇ · ▃ ▁
+                   Mo    ▂ █ ? ▄ ▂ · ▇ ▅ · ▁ █ ?
+                   Tu    ▆ · ▂ · ▇ ▅ ▃ ? █ ▆ ▄ ▂
+                   We    · · ▇ ? ▃ ▁ · ▆ ▄ ▂ █ ▆
+                   Th    ▇ ▅ ▃ ▁ █ · ▄ ▂ ? ▆ ▄
+                   Fr  ▅ ▃ ▁ █ ▆ ? ▂ █ ▆ ▄ ▂ ·
+                   Sa  ▁ ? ▆ ▄ · █ ▆ ▄ ▂ · ? ▅
+                   · zero  ? unknown  ▁–█ 1–12
+                   376 in window · 2025-11-06 – 2026-01-28
+                   Streaks
+                   3 days current observed streak
+                   18 days longest observed streak
+                   376 contributions window total
+                   Observed window: 2025-11-06 – 2026-01-28 · unknown coverage
+                   Pinned
+                   alex-dev/gitfetch  284 stars · Python
+                   A beautiful Git profile in your terminal.
+                   https://example.test/gitfetch
+                   alex-dev/tiny-tools  0 stars · Go
+                   Small tools, carefully made.
+                   Recent activity · public activity
+                   2026-01-28T09:00:00Z · PushEvent · alex-dev/gitfetch
+                   2026-01-27T12:00:00Z · ReleaseEvent · alex-dev/tiny-tools
+                   Local notes
+                     A generic plugin section
+                   See all enabled content with --details
+
+                   Untrusted  notes

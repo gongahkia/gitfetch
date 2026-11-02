@@ -62,7 +62,8 @@ def build_terminal_frame(config: dict[str, Any], document: ProfileDocument, deci
     style = "halfblock" if decision.backend == "kitty" else decision.text_style
     preferences = Preferences(details=display.get("details", False), layout=display.get("layout", "split"),
                               margin=display.get("margin", 0), avatar=display.get("avatar", True),
-                              avatar_width=display.get("avatar_width", 100), avatar_style=style)
+                              avatar_width=display.get("avatar_width", 100), avatar_style=style,
+                              visual_preset=display.get("visual_preset", "balanced"))
     loader = config.get("_avatar_loader") or AvatarLoader()
     asset = None
     if decision.backend != "none" and avatar_may_fit(viewport, preferences) and document.avatar_reference:
@@ -71,7 +72,8 @@ def build_terminal_frame(config: dict[str, Any], document: ProfileDocument, deci
             asset = asset.for_presentation(display.get("avatar_fit", "auto"))
     plan = plan_profile(document, viewport, preferences, AvatarGeometry(*asset.effective_size) if asset else None,
                         reference_date=reference_date)
-    text_lines = _paint_modern_rows(config, plan.rows, "ansi")
+    paint_config = {**config, "_terminal_color": decision.color} if decision.color == "256" else config
+    text_lines = _paint_modern_rows(paint_config, plan.rows, "ansi")
     graphics = None
     avatar = []
     if asset and plan.avatar_width and plan.composition != "text":

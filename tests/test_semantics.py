@@ -632,8 +632,8 @@ class SemanticTests(unittest.TestCase):
         from gitfetch.formats import render_card_svg
         for followers, expected in ((None, "unavailable"), (0, "0")):
             user = {"login": "alice", "followers": followers, "public_repos": 0, "following": 0}
-            svg = render_card_svg(self.config, user, [])
-            self.assertIn(f">{expected}</text>", svg)
+            svg = render_card_svg(self.config, user, [ModuleResult("stats", "Stats", [], {"user": user})])
+            self.assertIn(expected + " followers", svg)
             self.assertNotIn(">None</text>", svg)
 
     def test_repository_bitbucket_primary_language_is_not_an_exhaustive_percentage(self):

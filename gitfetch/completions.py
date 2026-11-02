@@ -7,7 +7,7 @@ TOP_FLAGS = [
     "--user", "--provider", "--base-url", "--profile", "--token", "--mode", "--config", "--set", "--format",
     "--save", "--no-avatar", "--margin", "--color", "--no-color", "--theme",
     "--avatar-style", "--avatar-color", "--avatar-renderer", "--graphics-info", "--watch", "--refresh",
-    "--offline", "--version", "--help", "--presentation", "--details",
+    "--offline", "--version", "--help", "--presentation", "--details", "--visual-preset",
 ]
 FORMAT_VALUES = ["ansi", "plain", "json", "svg", "card", "png"]
 
@@ -38,6 +38,7 @@ _gitfetch_completions() {{
     case "$prev" in
         --format)        COMPREPLY=( $(compgen -W "{formats}" -- "$cur") ); return ;;
         --provider)      COMPREPLY=( $(compgen -W "{providers}" -- "$cur") ); return ;;
+        --visual-preset) COMPREPLY=( $(compgen -W "balanced compact showcase" -- "$cur") ); return ;;
         --theme)         COMPREPLY=( $(compgen -W "{themes}" -- "$cur") ); return ;;
         --avatar-renderer) COMPREPLY=( $(compgen -W "auto kitty text" -- "$cur") ); return ;;
         --avatar-style)  COMPREPLY=( $(compgen -W "{styles}" -- "$cur") ); return ;;
@@ -111,6 +112,7 @@ _gitfetch() {{
     case "$prev" in
         --format) compadd -- {formats}; return ;;
         --provider) compadd -- {providers}; return ;;
+        --visual-preset) compadd -- balanced compact showcase; return ;;
         --theme) compadd -- {themes}; return ;;
         --avatar-renderer) compadd -- auto kitty text; return ;;
         --avatar-style) compadd -- {styles}; return ;;
@@ -240,6 +242,7 @@ complete -c gitfetch -l color -d "Force colors on"
 complete -c gitfetch -l no-color -d "Force colors off"
 complete -c gitfetch -l details -d "Show all enabled details"
 complete -c gitfetch -l presentation -x -a "modern classic" -d "Profile presentation"
+complete -c gitfetch -l visual-preset -x -a "balanced compact showcase" -d "Modern visual layout"
 complete -c gitfetch -l theme -x -a "{themes}" -d "Color theme"
 complete -c gitfetch -l avatar-renderer -x -a "auto kitty text" -d "Avatar backend"
 complete -c gitfetch -l graphics-info -d "Explain graphics selection"

@@ -1,0 +1,22 @@
+################   Alex Rivera
+&##SSSS##SSSS##&   @alex-dev · GitHub
+&#SSS&$**$&SSS#&   Building thoughtful developer tools and small, useful things…
+@#S#S@!!!!@S#S#@   Singapore   Open Source Collective   alex.example
+@#SSS#@$$@#SSS#@   42 public repos   1,280 followers
+@#S#%******%#S#@   87 following   0 gists   7 years on platform
+$@S&********&S@$   Languages · bytes
+$$$@$%%%%%%$@$$$   20/42 selected repos · partial
+                   Python 73.0%   TypeScript 16.0%   Go 6.0%
+                   Activity · 376 contributions · unknown coverage
+                   2025-11-06 – 2026-01-28
+                   Streaks
+                   3 days current observed streak
+                   18 days longest observed streak
+                   376 contributions window total
+                   Observed window: 2025-11-06 – 2026-01-28 · unknown coverage
+                   Pinned
+                   alex-dev/gitfetch  284 stars · Python
+                   alex-dev/tiny-tools  0 stars · Go
+                   Recent activity · public activity
+                   2026-01-28T09:00:00Z · PushEvent · alex-dev/gitfetch
+                   More enabled content: --details

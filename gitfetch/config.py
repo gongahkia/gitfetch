@@ -114,6 +114,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "color": True,
         "layout": "split",
         "presentation": "auto",
+        "visual_preset": "balanced",
+        "colors": {},
         "details": False,
         "show_empty": False,
         "margin": 0,
@@ -124,6 +126,12 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "avatar_color": "auto",
         "svg_font_family": "BigBlue Terminal 437, BigBlue Terminal Plus, monospace",
         "card_language_icons": True,
+        "card_width": 720,
+        "card_height": 360,
+        "export_style": "auto",
+        "export_avatar_fit": "original",
+        "svg_columns": 100,
+        "svg_rows": 40,
     },
     "repo_filters": {
         "exclude_forks": True,
@@ -542,6 +550,29 @@ def normalize_config(config: dict[str, Any]) -> None:
     theme = config["display"].get("theme", "default")
     if theme not in THEMES:
         raise ConfigError(f"display.theme '{theme}' is not a known theme (try one of: {', '.join(sorted(THEMES))})")
+    from gitfetch.design import HEX_COLOR, VISUAL_PRESETS, validate_colors
+    if config["display"].get("visual_preset", "balanced") not in VISUAL_PRESETS:
+        raise ConfigError("display.visual_preset must be balanced, compact, or showcase")
+    try:
+        validate_colors(config["display"].get("colors", {}))
+    except (ValueError, TypeError) as exc:
+        raise ConfigError(str(exc)) from exc
+    from gitfetch.export_design import dimensions, export_colors
+    display = config["display"]
+    if display.get("export_style", "auto") not in {"auto", "modern", "legacy"}:
+        raise ConfigError("display.export_style must be auto, modern, or legacy")
+    if display.get("export_avatar_fit", "original") not in {"original", "visible"}:
+        raise ConfigError("display.export_avatar_fit must be original or visible")
+    if not 20 <= display.get("svg_columns", 100) <= 240 or not 2 <= display.get("svg_rows", 40) <= 160:
+        raise ConfigError("SVG viewport requires 20–240 columns and 2–160 rows")
+    try:
+        dimensions(display)
+        export_colors(display)
+        for key in ("svg_background", "svg_foreground"):
+            if key in display and (not isinstance(display[key], str) or not HEX_COLOR.fullmatch(display[key])):
+                raise ValueError(key + " must be a six-digit hexadecimal color")
+    except (ValueError, TypeError) as exc:
+        raise ConfigError(str(exc)) from exc
     style = config["display"].get("avatar_style", "ascii")
     if style not in {"ascii", "halfblock", "braille"}:
         raise ConfigError(f"display.avatar_style '{style}' is not a known style")

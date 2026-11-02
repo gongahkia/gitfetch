@@ -13,6 +13,7 @@ from typing import Any
 from PIL import Image
 from wcwidth import iter_graphemes
 
+from gitfetch.design import THEMES, ThemeValue, color_role, resolve_colors
 from gitfetch.images import avatar_render, fetch_avatar_image, fit_avatar_image
 from gitfetch.modules.builtin import ModuleResult
 from gitfetch.presentation import PresentationSection, ProfileDocument, build_profile_document
@@ -26,28 +27,6 @@ COLOR_CODES = {
     "purple": 95,
     "cyan": 96,
     "gray": 97,
-}
-
-ThemeValue = int | str
-
-THEMES: dict[str, dict[str, ThemeValue]] = {
-    "default":   {"title": 92, "dim": 97, "key": 96, "value": 0, "accent": 93},
-    "mono":      {"title": 0,  "dim": 0,  "key": 0,  "value": 0, "accent": 0},
-    "solarized": {"title": 33, "dim": 90, "key": 36, "value": 0, "accent": 34},
-    "dracula":   {"title": 95, "dim": 90, "key": 96, "value": 0, "accent": 91},
-    "gruvbox":   {"title": 33, "dim": 90, "key": 32, "value": 0, "accent": 91},
-    "nord":      {"title": 96, "dim": 90, "key": 94, "value": 0, "accent": 36},
-    "tokyonight":         {"title": "#7dcfff", "dim": "#565f89", "key": "#bb9af7", "value": 0, "accent": "#9ece6a"},
-    "catppuccin-mocha":    {"title": "#cba6f7", "dim": "#585b70", "key": "#89b4fa", "value": 0, "accent": "#f5c2e7"},
-    "catppuccin-macchiato":{"title": "#c6a0f6", "dim": "#5b6078", "key": "#8aadf4", "value": 0, "accent": "#f5bde6"},
-    "catppuccin-frappe":   {"title": "#ca9ee6", "dim": "#626880", "key": "#8caaee", "value": 0, "accent": "#f4b8e4"},
-    "catppuccin-latte":    {"title": "#8839ef", "dim": "#6c6f85", "key": "#1e66f5", "value": 0, "accent": "#ea76cb"},
-    "monokai":     {"title": "#a6e22e", "dim": "#75715e", "key": "#66d9ef", "value": 0, "accent": "#f92672"},
-    "one-dark":    {"title": "#61afef", "dim": "#5c6370", "key": "#c678dd", "value": 0, "accent": "#98c379"},
-    "rose-pine":   {"title": "#ebbcba", "dim": "#6e6a86", "key": "#c4a7e7", "value": 0, "accent": "#f6c177"},
-    "ayu":         {"title": "#ffcc66", "dim": "#5c6773", "key": "#5ccfe6", "value": 0, "accent": "#ffa759"},
-    "material":    {"title": "#82aaff", "dim": "#546e7a", "key": "#c792ea", "value": 0, "accent": "#ffcb6b"},
-    "everforest":  {"title": "#a7c080", "dim": "#859289", "key": "#7fbbb3", "value": 0, "accent": "#dbbc7f"},
 }
 
 THEME_NAMES = tuple(THEMES.keys())
@@ -127,12 +106,15 @@ def render_output(
         )
     if output_format == "card":
         from gitfetch.formats import render_card_svg
-        return render_card_svg(config, user, visible_modules)
+        return render_card_svg(config, user, visible_modules, document=document)
     if document is None:
         provider = config.get("profile", {}).get("provider", "github")
         instance = config.get("providers", {}).get(provider, {}).get("base_url", "")
         document = build_profile_document(user, modules, provider=provider, instance=instance)
     if output_format == "svg":
+        if config["display"].get("presentation") == "modern" and config["display"].get("export_style") != "legacy":
+            from gitfetch.terminal_svg import render_modern_svg
+            return render_modern_svg(config, document)
         from gitfetch.formats import render_terminal_svg
         forced = {**config, "_color_force": "on", "_skip_terminal_clamp": True}
         return render_terminal_svg(_render_visual(forced, document.avatar_reference, document.sections, "ansi"), config)
@@ -152,26 +134,26 @@ def modern_enabled(config: dict[str, Any], output_format: str) -> bool:
 def _paint_modern_rows(config: dict[str, Any], rows, output_format: str) -> list[str]:
     display = config["display"]
     enabled = color_enabled(config, output_format)
-    palette = palette_for(config)
+    palette = resolve_colors(display.get("theme", "default"), display.get("colors", {}))
     # Descriptive text follows the user's foreground instead of a low-contrast
     # dark theme gray. Only decorative rail dots use the dim palette role.
-    roles = {"identity": "title", "heading": "key", "text": "value", "muted": "value", "track": "dim",
-             "accent": "accent", "stat": "title", "notice": "accent"}
     text_lines = []
     for row in rows:
         parts = []
         for span in row.spans:
-            code = palette[roles[span.role]]
-            # Existing avatar-color preference also bounds modern text colors;
-            # reduced palettes never receive truecolor escape sequences.
-            if display.get("avatar_color") == "256" and isinstance(code, str) and code.startswith("#"):
-                sequence = _fg(int(code[1:3], 16), int(code[3:5], 16), int(code[5:7], 16), "256")
-                parts.append(f"{sequence}{span.text}\x1b[0m" if enabled else span.text)
-            else:
-                painted = colorize(span.text, code, enabled)
-                if enabled and display.get("theme") != "mono" and span.role in {"identity", "heading"}:
-                    painted = f"\x1b[1m{painted}\x1b[0m"
-                parts.append(painted)
+            color = palette[color_role(span.role, row.module)]
+            sequence = ""
+            if enabled and color.rgb is not None:
+                mode = "256" if display.get("avatar_color") == "256" or config.get("_terminal_color") == "256" else "truecolor"
+                sequence = _fg(*color.rgb, mode)
+            elif enabled and color.terminal_index is not None:
+                index = color.terminal_index
+                sequence = f"\x1b[{30 + index if index < 8 else 90 + index - 8}m"
+            painted = f"{sequence}{span.text}\x1b[00m" if sequence else span.text
+            if enabled and display.get("theme") != "mono" and (span.role in {"identity", "heading"}
+                    or span.role == "stat" and display.get("visual_preset") == "showcase"):
+                painted = f"\x1b[1m{painted}\x1b[0m"
+            parts.append(painted)
         text_lines.append("".join(parts))
     return text_lines
 
@@ -186,6 +168,7 @@ def _render_modern(config: dict[str, Any], document: ProfileDocument, output_for
         details=display.get("details", False), layout=display.get("layout", "split"),
         margin=display.get("margin", 0), avatar=display.get("avatar", True),
         avatar_width=display.get("avatar_width", 100), avatar_style=display.get("avatar_style", "ascii"),
+        visual_preset=display.get("visual_preset", "balanced"),
     )
     reference = datetime.now(timezone.utc).date()
     # Tiny/text-only output need not download an avatar. Source geometry and the

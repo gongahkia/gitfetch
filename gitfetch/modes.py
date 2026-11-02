@@ -64,6 +64,9 @@ def _apply_common_overrides(args: argparse.Namespace, config: dict[str, Any]) ->
         if args.margin < 0:
             raise ConfigError("--margin must be non-negative")
         config["display"]["margin"] = args.margin
+    for field in ("visual_preset", "presentation", "details"):
+        if getattr(args, field, None):
+            config["display"][field] = getattr(args, field)
     if getattr(args, "theme", None):
         config["display"]["theme"] = args.theme
     if getattr(args, "color", None) is True:
@@ -116,7 +119,7 @@ def _render_with_lines(
     result: str | None = None
     if config["display"].get("avatar") and output_format in {"ansi", "plain"} and avatar_url:
         configured_width = int(config["display"]["avatar_width"])
-        term_cols = shutil.get_terminal_size((configured_width, 24)).columns
+        term_cols = config["display"].get("svg_columns", 100) if config.get("_export_viewport") else shutil.get_terminal_size((configured_width, 24)).columns
         usable_cols = max(0, term_cols - 2 * margin)
         layout = config["display"].get("layout", "split")
         if layout == "split":
@@ -218,7 +221,7 @@ def _emit_mode_output(
     if output_format == "svg":
         from gitfetch.formats import render_terminal_svg
 
-        svg_config = {**config, "_color_force": "on"}
+        svg_config = {**config, "_color_force": "on", "_export_viewport": True}
         palette = palette_for(svg_config)
         text_lines = module_lines(visible_modules, color_enabled(svg_config, "ansi"), palette)
         terminal_text = _render_with_lines(svg_config, "ansi", avatar_url, text_lines)
@@ -524,7 +527,8 @@ def handle_compare_command(args: argparse.Namespace) -> int:
     if args.column_width is not None:
         column_width = max(20, args.column_width)
     else:
-        term_cols = shutil.get_terminal_size((120, 24)).columns
+        term_cols = (shutil.get_terminal_size((120, 24)).columns if output_format in {"ansi", "plain"}
+                     else config["display"].get("svg_columns", 100))
         budget = term_cols - 2 * margin - gap * (user_count - 1)
         column_width = max(20, budget // user_count)
     avatar_color = effective_avatar_color(config, output_format)
@@ -645,7 +649,7 @@ def handle_compare_command(args: argparse.Namespace) -> int:
     if output_format == "svg":
         from gitfetch.formats import render_terminal_svg
 
-        svg_config = {**config, "_color_force": "on"}
+        svg_config = {**config, "_color_force": "on", "_export_viewport": True}
         svg_summary = module_lines([summary], color_enabled(svg_config, "ansi"), palette_for(svg_config))
         _write_or_print(render_terminal_svg("\n".join(svg_summary + [""] + rows), config), args)
     else:
